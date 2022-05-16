@@ -1,0 +1,61 @@
+{
+  "name": "tea",
+  "version": "0.0.1",
+  "description": "Tea is a tool for learning how to write chinese.",
+  "private": true,
+  "dependencies": {
+    "@material/button": "^13.0.0",
+    "@material/card": "^13.0.0",
+    "@material/dialog": "^13.0.0",
+    "@material/elevation": "^13.0.0",
+    "@material/fab": "^13.0.0",
+    "@material/form-field": "^13.0.0",
+    "@material/icon-button": "^13.0.0",
+    "@material/layout-grid": "^13.0.0",
+    "@material/linear-progress": "^13.0.0",
+    "@material/list": "^13.0.0",
+    "@material/radio": "^13.0.0",
+    "@material/slider": "^13.0.0",
+    "@material/snackbar": "^13.0.0",
+    "@material/textfield": "^13.0.0",
+    "@material/typography": "^13.0.0",
+    "color": "^4.2.3",
+    "hanzi-writer": "^3.3.0",
+    "hanzi-writer-data": "^2.0.1",
+    "idb": "^7.0.1",
+    "workbox-precaching": "^6.5.3",
+    "workbox-routing": "^6.5.3",
+    "workbox-strategies": "^6.5.3",
+    "workbox-webpack-plugin": "^6.5.3"
+  },
+  "devDependencies": {
+    "@types/color": "^3.0.3",
+    "css-loader": "^6.7.1",
+    "extract-loader": "^5.1.0",
+    "file-loader": "^6.2.0",
+    "html-webpack-plugin": "^5.3.1",
+    "node-fetch": "^3.2.3",
+    "sass": "^1.32.13",
+    "sass-loader": "^12.6.0",
+    "ts-loader": "^9.2.1",
+    "typescript": "^4.2.4",
+    "webpack": "^5.37.1",
+    "webpack-cli": "^4.7.0",
+    "webpack-dev-server": "^4.8.1",
+    "webpack-merge": "^5.8.0"
+  },
+  "scripts": {
+    "build": "webpack --config webpack.prod.js",
+    "start": "webpack serve --open --config webpack.dev.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/steventango/tea.git"
+  },
+  "author": "Steven Tang",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/steventango/tea/issues"
+  },
+  "homepage": "https://github.com/steventango/tea#readme"
+}

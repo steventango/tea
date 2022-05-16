@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "module": "es2022",
+    "moduleResolution": "node",
+    "outDir": "dist",
+    "preserveConstEnums": true,
+    "removeComments": true,
+    "sourceMap": true,
+    "strict": true,
+    "target": "es2022",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+  },
+  "compileOnSave": true,
+  "include": ["src/**/*"],
+}
