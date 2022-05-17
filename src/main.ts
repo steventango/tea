@@ -1,7 +1,6 @@
 import HanziWriter from 'hanzi-writer';
 import { CharDataLoaderFn } from 'hanzi-writer';
 import Color from 'color';
-import { DICT_entry } from './dict';
 import { MDCLinearProgress } from '@material/linear-progress';
 import Database from './database';
 import { DB, PartionElement } from './database';
@@ -10,18 +9,11 @@ import { randomp, sample } from './util';
 import {MDCDialog} from '@material/dialog';
 import {MDCSlider} from '@material/slider';
 import { MDCTextField } from '@material/textfield';
+import Panel from './panel';
+
+
 const linearProgress = new MDCLinearProgress(document.querySelector('.mdc-linear-progress')!);
 
-
-function new_li(text: string) {
-  const li = document.createElement('li');
-  li.classList.add('mdc-list-item');
-  const span_text = document.createElement('span');
-  span_text.classList.add('mdc-list-item__text');
-  span_text.textContent = text;
-  li.appendChild(span_text);
-  return li;
-}
 
 class App {
   char_queue: Array<string>;
@@ -32,6 +24,7 @@ class App {
   db: IDBPDatabase<DB>;
   charDataLoader: CharDataLoaderFn;
   defaultCharDataLoader: CharDataLoaderFn;
+  panel: Panel;
   partitions: Array<Array<PartionElement>>;
   partition_lengths: Array<number>;
   probabilities: Array<number>;
@@ -72,6 +65,7 @@ class App {
     this.buffer_size = 0;
     this.type = 't';
     this.color = '';
+    this.panel = new Panel();
     this.entry = null;
     this.totalMistakes = 0;
     this.writer = HanziWriter.create(target.id, '一', {
@@ -100,35 +94,22 @@ class App {
   }
 
   updateEntry() {
-    const phrase_h1 = document.getElementById('phrase')!;
-    const pinyin_h2 = document.getElementById('pinyin')!;
-    const jyutping_h2 = document.getElementById('jyutping')!;
-    const definitions_div = document.getElementById('definitions')!;
-
-    phrase_h1.textContent = '\xa0';
-    // if (this.seen.has(entry)) {
-    //   this.enable_outline = false;
-    // } else {
-    //   this.enable_outline = true;
-    //   this.seen.add(entry);
-    // }
+    this.panel.phrase = '\xa0';
     this.char_queue.push(...this.entry![this.type].split('').reverse());
-    pinyin_h2.textContent = this.entry!.p.join(', ');
-    jyutping_h2.textContent = this.entry!.j.join(', ') || '\xa0';
-    while (definitions_div.children.length > 0) {
-      definitions_div.removeChild(definitions_div.children[0]);
-    }
+    this.panel.pinyin = this.entry!.p.join(', ');
+    this.panel.jyutping = this.entry!.j.join(', ') || '\xa0';
+
+    const definitions = [];
     for (const definition of this.entry!.d) {
-      const li = new_li(definition
+      definitions.push(definition
         .replaceAll(new RegExp(`[${this.entry!.t}]`, 'g'), '')
         .replaceAll(new RegExp(`[${this.entry!.s}]`, 'g'), '')
       );
-      definitions_div.appendChild(li);
     }
     if (this.entry!.h) {
-      const li = new_li('HSK ' + this.entry!.h);
-      definitions_div.appendChild(li);
+      definitions.push('HSK ' + this.entry!.h);
     }
+    this.panel.definitions = definitions;
   }
 
   async nextEntry() {
@@ -317,8 +298,7 @@ class App {
 
     this.writer.quiz({
       onComplete: async (summaryData) => {
-        const phrase_h1 = document.getElementById('phrase')!;
-        phrase_h1.textContent += summaryData.character;
+        this.panel.phrase += summaryData.character;
         this.totalMistakes += summaryData.totalMistakes;
         setTimeout(() => {
           this.update_writer();
