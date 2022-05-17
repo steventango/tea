@@ -90,7 +90,7 @@ export default class Database {
 
   async setup_partitions() {
     if (await this.db!.count('partitions') < 1) {
-      let response = await fetch('./data/partitions.json');
+      let response = await fetch('https://cdn.jsdelivr.net/gh/steventango/tea-data/partitions.json');
       let data = await response.json() as Partitions;
 
       const tx = this.db!.transaction(['partitions', 'partition-lengths'], 'readwrite');
