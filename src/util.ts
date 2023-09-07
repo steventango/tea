@@ -1,7 +1,7 @@
-export function randomp(probabilities: Array<number>) {
+export function weightedRandom(weights: Array<number>) {
   const r = Math.random();
   let sum = 0;
-  for (const [i, p] of probabilities.entries()) {
+  for (const [i, p] of weights.entries()) {
     sum += p;
     if (r < sum) {
       return i;

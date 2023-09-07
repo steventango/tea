@@ -1,11 +1,9 @@
-import HanziWriter from 'hanzi-writer';
-import { CharDataLoaderFn } from 'hanzi-writer';
+import HanziWriter, { CharDataLoaderFn } from 'hanzi-writer';
 import Color from 'color';
 import { MDCLinearProgress } from '@material/linear-progress';
-import Database from './database';
-import { DB, PartionElement } from './database';
+import Database, { DB, PartitionElement } from './database';
 import { IDBPDatabase } from 'idb';
-import { randomp, sample } from './util';
+import { weightedRandom, sample } from './util';
 import {MDCDialog} from '@material/dialog';
 import {MDCSlider} from '@material/slider';
 import { MDCTextField } from '@material/textfield';
@@ -18,14 +16,14 @@ const linearProgress = new MDCLinearProgress(document.querySelector('.mdc-linear
 class App {
   char_queue: Array<string>;
   color: string;
-  entry: PartionElement|null;
+  entry: PartitionElement|null;
   enable_outline: boolean;
   writer: HanziWriter;
   db: IDBPDatabase<DB>;
   charDataLoader: CharDataLoaderFn;
   defaultCharDataLoader: CharDataLoaderFn;
   panel: Panel;
-  partitions: Array<Array<PartionElement>>;
+  partitions: Array<Array<PartitionElement>>;
   partition_lengths: Array<number>;
   probabilities: Array<number>;
   type: 't'|'s';
@@ -85,7 +83,7 @@ class App {
         });
       }
     });
-    this.defaultCharDataLoader = this.writer._options!.charDataLoader!;
+    this.defaultCharDataLoader = this.writer._options.charDataLoader!;
     this.writer._options.charDataLoader = this.charDataLoader;
     window.addEventListener('resize', () => {
       this.resize();
@@ -115,29 +113,29 @@ class App {
   async nextEntry() {
     if (this.entry) {
       if (this.totalMistakes <= 1) {
-        const tx = this.db!.transaction('partitions', 'readwrite');
+        const tx = this.db.transaction('partitions', 'readwrite');
         const promises = [];
         if (!this.entry.correct) {
           this.entry.correct = 1;
         } else {
           this.entry.correct++;
         }
-        if (this.entry!.correct >= 2) {
-          this.partitions[8].push(this.entry!);
+        if (this.entry.correct >= 2) {
+          this.partitions[8].push(this.entry);
           promises.push(tx.store.put(this.partitions[8], 'learned'));
-        } else if (this.entry!.correct >= 1) {
+        } else if (this.entry.correct >= 1) {
           const index = 0;
-          this.partitions[9].splice(index, 0, this.entry!);
+          this.partitions[9].splice(index, 0, this.entry);
         } else {
           const index = Math.floor(this.partitions[9].length * 0.8);
-          this.partitions[9].splice(index, 0, this.entry!);
+          this.partitions[9].splice(index, 0, this.entry);
         }
         promises.push(tx.store.put(this.partitions[9], 'buffer'));
         promises.push(tx.done);
       } else {
         this.entry.correct = 0;
         const index = Math.floor(this.partitions[9].length * 0.8);
-        this.partitions[9].splice(index, 0, this.entry!);
+        this.partitions[9].splice(index, 0, this.entry);
         this.db.put('partitions', this.partitions[9], 'buffer');
       }
     }
@@ -149,7 +147,7 @@ class App {
       remainder /= 2;
     }
     probabilities = probabilities.reverse();
-    const r = randomp(probabilities);
+    const r = weightedRandom(probabilities);
     const entry = this.partitions[9][r];
     this.partitions[9].splice(r);
     this.entry = entry;
@@ -160,32 +158,32 @@ class App {
     const total = this.partition_lengths
       .filter((v, i) => this.probabilities[i] > 0 ? v : 0)
       .reduce((a, b) => a + b, 0);
-    const notdone = this.partitions
+    const notDone = this.partitions
       .map((partition) => partition.length)
       .filter((v, i) => this.probabilities[i] > 0 ? v : 0)
       .reduce((a, b) => a + b, 0) +
     this.partitions[9]
       .filter((v) => v.h ? (this.probabilities[v.h] > 0 ? 1 : 0) : (this.probabilities[0] > 0 ? 1 : 0))
       .length;
-      console.log(notdone, total);
-    linearProgress.progress = 1 - notdone / total;
+      console.log(notDone, total);
+    linearProgress.progress = 1 - notDone / total;
   }
 
   async load() {
     const tx = this.db.transaction(['partitions', 'partition-lengths'], 'readonly');
-    const promises: [Promise<PartionElement[]>, Promise<number>][] = [];
+    const promises: [Promise<PartitionElement[]>, Promise<number>][] = [];
     for (let i = 0; i <= 7; i++) {
       promises.push([
-        tx.objectStore('partitions').get(i.toString()) as Promise<PartionElement[]>,
+        tx.objectStore('partitions').get(i.toString()) as Promise<PartitionElement[]>,
         tx.objectStore('partition-lengths').get(i.toString()) as Promise<number>,
       ]);
     }
     promises.push([
-      tx.objectStore('partitions').get('learned') as Promise<PartionElement[]>,
+      tx.objectStore('partitions').get('learned') as Promise<PartitionElement[]>,
       tx.objectStore('partition-lengths').get('learned') as Promise<number>
     ]);
     promises.push([
-      tx.objectStore('partitions').get('buffer') as Promise<PartionElement[]>,
+      tx.objectStore('partitions').get('buffer') as Promise<PartitionElement[]>,
       tx.objectStore('partition-lengths').get('buffer') as Promise<number>
     ]);
     const partitions = await Promise.all(promises.map(async (p) => await Promise.all(p)));
@@ -241,7 +239,7 @@ class App {
     if (this.partitions[9].length < this.buffer_size) {
       const changed = new Set<number>();
       while (this.partitions[9].length < this.buffer_size) {
-        const partitioni = randomp(this.probabilities);
+        const partitioni = weightedRandom(this.probabilities);
         const partition = this.partitions[partitioni];
         const word = sample(partition);
         if (word) {

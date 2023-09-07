@@ -2,12 +2,12 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { CharacterJson } from 'hanzi-writer';
 import { DICT_entry } from './dict';
 
-export interface PartionElement extends DICT_entry {
+export interface PartitionElement extends DICT_entry {
   correct?: number;
 }
 
 interface Partitions {
-  [id: string]: Array<PartionElement>
+  [id: string]: Array<PartitionElement>
 }
 
 interface HanziWriterData {
@@ -20,7 +20,7 @@ export interface DB extends DBSchema {
     key: string;
   },
   partitions: {
-    value: Array<PartionElement>;
+    value: Array<PartitionElement>;
     key: string;
   },
   'partition-lengths': {
