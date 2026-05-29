@@ -19,27 +19,13 @@ function parseProbabilityInputs() {
     const input = document.getElementById(`probability-${name}`)! as HTMLInputElement;
     probabilities.push(input.checked ? 1 : 0);
   }
-  if (!probabilities.some((value) => value > 0)) {
-    probabilities[0] = 1;
-    const fallback = document.getElementById(`probability-${probabilityFields[0]}`)! as HTMLInputElement;
-    fallback.checked = true;
-  }
   return probabilities;
 }
 
 function initializeProbabilityCheckboxes() {
-  const probabilityInputs: Array<HTMLInputElement> = [];
   for (const name of probabilityFields) {
     const input = document.getElementById(`probability-${name}`)! as HTMLInputElement;
-    const checkbox = new MDCCheckbox(input.closest('.mdc-checkbox')!);
-    probabilityInputs.push(input);
-    input.addEventListener('change', () => {
-      const checkedCount = probabilityInputs.filter((value) => value.checked).length;
-      if (checkedCount === 0) {
-        input.checked = true;
-        checkbox.checked = true;
-      }
-    });
+    new MDCCheckbox(input.closest('.mdc-checkbox')!);
   }
 }
 
@@ -422,6 +408,25 @@ async function main() {
   initializeProbabilityCheckboxes();
   app.render();
 
+  const sourceInputs = probabilityFields.map((name) =>
+    document.getElementById(`probability-${name}`)! as HTMLInputElement
+  );
+  const sourceControls = sourceInputs.map((input) => input.closest('.probability-control')!);
+
+  const setSourceSelectionError = (hasError: boolean) => {
+    for (const control of sourceControls) {
+      control.classList.toggle('mdc-text-field--invalid', hasError);
+    }
+  };
+
+  const hasSelectedSource = () => sourceInputs.some((input) => input.checked);
+
+  sourceInputs.forEach((input) => {
+    input.addEventListener('change', () => {
+      setSourceSelectionError(!hasSelectedSource());
+    });
+  });
+
   button.addEventListener('click', () => {
     dialog.open();
     // read config, write config
@@ -435,6 +440,7 @@ async function main() {
       radio_s.checked = true;
     }
     setTimeout(() => {
+      setSourceSelectionError(false);
       for (const [index, name] of probabilityFields.entries()) {
         const checkbox = document.getElementById(`probability-${name}`)! as HTMLInputElement;
         const value = app.probabilities[index] ?? defaultProbabilities[index];
@@ -445,15 +451,20 @@ async function main() {
       textfield_color.value = app.color;
     }, 500);
   });
-  const close_button = dialog.root.querySelector('.mdc-dialog__close')! as HTMLElement;
-  close_button.addEventListener('click', () => {
-    dialog.close();
-  });
 
-  dialog.listen('MDCDialog:closing', async () => {
+  const applySettings = async () => {
     const radio_t = document.getElementById('radio-t')! as HTMLInputElement;
+    const probabilities = parseProbabilityInputs();
+    const selectedAnySource = probabilities.some((value) => value > 0);
+    if (!selectedAnySource) {
+      setSourceSelectionError(true);
+      return false;
+    }
+    setSourceSelectionError(false);
+
     const tx = db.transaction('config', 'readwrite');
     const hadType = app.type;
+    const textfield_color = new MDCTextField(document.getElementById('color-textfield')!);
     const promises = [];
     if (radio_t.checked) {
       if (app.type !== 't') {
@@ -465,11 +476,10 @@ async function main() {
       promises.push(tx.store.put('t', 'simplified'));
     }
 
-    const textfield_color = new MDCTextField(document.getElementById('color-textfield')!);
-      if (textfield_color.value !== app.color) {
+    if (textfield_color.value !== app.color) {
       promises.push(tx.store.put(textfield_color.value, 'color'));
     }
-    const probabilities = parseProbabilityInputs();
+
     const hadProbabilityChange = probabilities.some((value, index) => value !== app.probabilities[index]);
     app.probabilities = probabilities;
     promises.push(tx.store.put(probabilities, 'probabilities'));
@@ -477,7 +487,7 @@ async function main() {
       promises.push(tx.done);
       await Promise.all(promises);
       if (app.color !== textfield_color.value || hadType !== app.type) {
-        app.updateTheme();
+        await app.updateTheme();
       }
       if (hadProbabilityChange) {
         await app.flushBuffer();
@@ -488,8 +498,24 @@ async function main() {
         await app.update_writer();
       }
     }
+
+    return true;
+  };
+
+  const close_button = dialog.root.querySelector('.mdc-dialog__close')! as HTMLElement;
+  close_button.addEventListener('click', () => {
+    dialog.close();
   });
-  // on close write settings
+  const ok_button = dialog.root.querySelector('.mdc-dialog__button')! as HTMLElement;
+  ok_button.addEventListener('click', () => {
+    dialog.close();
+  });
+  dialog.listen('MDCDialog:closing', async (event: Event) => {
+    const shouldPersistSettings = await applySettings();
+    if (!shouldPersistSettings) {
+      event.preventDefault();
+    }
+  });
 
 
   // const learned = await db.get('partitions', 'learned');

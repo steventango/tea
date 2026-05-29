@@ -28,6 +28,7 @@
   --mdc-theme-surface: #fff;
   --mdc-theme-background: #fff;
   --mdc-theme-on-secondary: rgba(0, 0, 0, 0.6);
+  --mdc-theme-error: #b00020;
 }
 
 html,
@@ -120,6 +121,14 @@ main,
 
 .probability-control {
   margin: .4em 0;
+}
+
+.probability-control.mdc-text-field--invalid {
+  --invalid-color: var(--mdc-theme-error, #b00020);
+}
+
+.probability-control.mdc-text-field--invalid .mdc-checkbox .mdc-checkbox__native-control:enabled:not(:checked):not(:indeterminate):not([data-indeterminate='true']) ~ .mdc-checkbox__background {
+  border-color: var(--invalid-color);
 }
 
 @media (max-width: 839px) {
