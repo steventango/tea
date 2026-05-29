@@ -453,6 +453,7 @@ async function main() {
   dialog.listen('MDCDialog:closing', async () => {
     const radio_t = document.getElementById('radio-t')! as HTMLInputElement;
     const tx = db.transaction('config', 'readwrite');
+    const hadType = app.type;
     const promises = [];
     if (radio_t.checked) {
       if (app.type !== 't') {
@@ -465,17 +466,27 @@ async function main() {
     }
 
     const textfield_color = new MDCTextField(document.getElementById('color-textfield')!);
-    if (textfield_color.value !== app.color) {
+      if (textfield_color.value !== app.color) {
       promises.push(tx.store.put(textfield_color.value, 'color'));
     }
     const probabilities = parseProbabilityInputs();
+    const hadProbabilityChange = probabilities.some((value, index) => value !== app.probabilities[index]);
     app.probabilities = probabilities;
     promises.push(tx.store.put(probabilities, 'probabilities'));
     if (promises.length > 0) {
       promises.push(tx.done);
       await Promise.all(promises);
-      // only if color change
-      app.updateTheme();
+      if (app.color !== textfield_color.value || hadType !== app.type) {
+        app.updateTheme();
+      }
+      if (hadProbabilityChange) {
+        await app.flushBuffer();
+        app.char_queue = [];
+        app.entry = null;
+        app.totalMistakes = 0;
+        await app.updateBuffer();
+        await app.update_writer();
+      }
     }
   });
   // on close write settings
