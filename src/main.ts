@@ -76,8 +76,7 @@ class App {
               const p1 = performance.now()
               console.debug(`Load ${char} from db: ${p1 - p0} ms`);
             } else {
-              const error = new Error(`Couldn't find the requested char ${char} in hanzi-writer-data.`)
-              onError(error);
+              onError(new Error(`Couldn't find the requested char ${char} in hanzi-writer-data.`))
             }
           })
           .catch((error) => {
@@ -108,10 +107,16 @@ class App {
       renderer: 'svg',
       onLoadCharDataError: (error) => {
         console.warn(error);
-        this.writer._options!.onComplete!({
-          character: this.writer._char!,
-          totalMistakes: 0
-        });
+        if (typeof this.writer._options.onComplete === 'function') {
+          this.writer._options.onComplete({
+            character: this.writer._char!,
+            totalMistakes: 0
+          });
+        } else {
+          setTimeout(() => {
+            this.update_writer().catch(console.error);
+          }, 0);
+        }
       }
     });
     this.defaultCharDataLoader = this.writer._options.charDataLoader!;
