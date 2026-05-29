@@ -5,6 +5,7 @@
 // @import "@material/elevation/mdc-elevation";
 // @import "@material/fab/mdc-fab";
 @import "@material/form-field/mdc-form-field";
+@import "@material/checkbox/mdc-checkbox";
 @import "@material/icon-button/mdc-icon-button";
 @import "@material/layout-grid/mdc-layout-grid";
 @import "@material/linear-progress/mdc-linear-progress";
@@ -14,7 +15,6 @@
 @import "@material/rtl/mixins";
 @import "@material/shape/mixins";
 @import "@material/shape/functions";
-@import "@material/slider/styles";
 // @import "@material/snackbar/mdc-snackbar";
 @import "@material/textfield/mdc-text-field";
 @import "@material/theme/color-palette";
@@ -116,6 +116,10 @@ main,
 .textfield--two {
   display: flex;
   justify-content: space-between;
+}
+
+.probability-control {
+  margin: .4em 0;
 }
 
 @media (max-width: 839px) {

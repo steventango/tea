@@ -6,6 +6,7 @@
   "dependencies": {
     "@material/button": "^13.0.0",
     "@material/card": "^13.0.0",
+    "@material/checkbox": "^13.0.0",
     "@material/dialog": "^13.0.0",
     "@material/elevation": "^13.0.0",
     "@material/fab": "^13.0.0",

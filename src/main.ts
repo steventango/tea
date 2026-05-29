@@ -5,12 +5,43 @@ import Database, { DB, PartitionElement } from './database';
 import { IDBPDatabase } from 'idb';
 import { weightedRandom, sample } from './util';
 import {MDCDialog} from '@material/dialog';
-import {MDCSlider} from '@material/slider';
+import {MDCCheckbox} from '@material/checkbox';
 import { MDCTextField } from '@material/textfield';
 import Panel from './panel';
 
-
 const linearProgress = new MDCLinearProgress(document.querySelector('.mdc-linear-progress')!);
+const probabilityFields = ['dictionary', 'hsk-1', 'hsk-2', 'hsk-3', 'hsk-4', 'hsk-5', 'hsk-6', 'hsk-7', 'learned'] as const;
+const defaultProbabilities = probabilityFields.map(() => 1 / probabilityFields.length);
+
+function parseProbabilityInputs() {
+  const probabilities: Array<number> = [];
+  for (const name of probabilityFields) {
+    const input = document.getElementById(`probability-${name}`)! as HTMLInputElement;
+    probabilities.push(input.checked ? 1 : 0);
+  }
+  if (!probabilities.some((value) => value > 0)) {
+    probabilities[0] = 1;
+    const fallback = document.getElementById(`probability-${probabilityFields[0]}`)! as HTMLInputElement;
+    fallback.checked = true;
+  }
+  return probabilities;
+}
+
+function initializeProbabilityCheckboxes() {
+  const probabilityInputs: Array<HTMLInputElement> = [];
+  for (const name of probabilityFields) {
+    const input = document.getElementById(`probability-${name}`)! as HTMLInputElement;
+    const checkbox = new MDCCheckbox(input.closest('.mdc-checkbox')!);
+    probabilityInputs.push(input);
+    input.addEventListener('change', () => {
+      const checkedCount = probabilityInputs.filter((value) => value.checked).length;
+      if (checkedCount === 0) {
+        input.checked = true;
+        checkbox.checked = true;
+      }
+    });
+  }
+}
 
 
 class App {
@@ -147,7 +178,7 @@ class App {
       remainder /= 2;
     }
     probabilities = probabilities.reverse();
-    const r = weightedRandom(probabilities);
+    const r = weightedRandom(this.getNormalizedProbabilities());
     const entry = this.partitions[9][r];
     this.partitions[9].splice(r);
     this.entry = entry;
@@ -198,7 +229,19 @@ class App {
   }
 
   async updateProbability() {
-    this.probabilities = await this.db.get('config', 'probabilities');
+    const probabilities = await this.db.get('config', 'probabilities');
+    if (!probabilities || probabilities.length !== probabilityFields.length) {
+      this.probabilities = defaultProbabilities;
+      return;
+    }
+    const parsedProbabilities = probabilities.map((value: any) => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return Math.max(0, value);
+      }
+      return 0;
+    });
+    const hasProbabilities = parsedProbabilities.some((probability: number) => probability > 0);
+    this.probabilities = hasProbabilities ? parsedProbabilities : defaultProbabilities;
   }
 
   async updateType() {
@@ -239,7 +282,7 @@ class App {
     if (this.partitions[9].length < this.buffer_size) {
       const changed = new Set<number>();
       while (this.partitions[9].length < this.buffer_size) {
-        const partitioni = weightedRandom(this.probabilities);
+        const partitioni = weightedRandom(this.getNormalizedProbabilities());
         const partition = this.partitions[partitioni];
         const word = sample(partition);
         if (word) {
@@ -257,6 +300,20 @@ class App {
       promises.push(tx.done);
       Promise.all(promises);
     }
+  }
+
+  private getNormalizedProbabilities() {
+    const sanitized = this.probabilities.map((probability) => {
+      if (Number.isFinite(probability) && probability >= 0) {
+        return probability;
+      }
+      return 0;
+    });
+    const sum = sanitized.reduce((total, probability) => total + probability, 0);
+    if (sanitized.length === 0 || sum <= 0) {
+      return defaultProbabilities;
+    }
+    return sanitized.map((probability) => probability / sum);
   }
 
   async flushBuffer() {
@@ -346,6 +403,7 @@ async function main() {
   const db = (await Database.build()).db!;
   const app = new App(db);
   await app.load();
+  initializeProbabilityCheckboxes();
   app.render();
 
   button.addEventListener('click', () => {
@@ -361,9 +419,10 @@ async function main() {
       radio_s.checked = true;
     }
     setTimeout(() => {
-      for (const [index, name] of ['dictionary', 'hsk-1', 'hsk-2', 'hsk-3', 'hsk-4', 'hsk-5', 'hsk-6', 'hsk-7', 'learned'].entries()) {
-        const slider = new MDCSlider(document.getElementById(`probability-${name}`)!);
-        slider.setValue(app.probabilities[index]);
+      for (const [index, name] of probabilityFields.entries()) {
+        const checkbox = document.getElementById(`probability-${name}`)! as HTMLInputElement;
+        const value = app.probabilities[index] ?? defaultProbabilities[index];
+        checkbox.checked = value > 0;
       }
       const textfield_tolerance = new MDCTextField(document.getElementById('tolerance-textfield')!);
       const textfield_color = new MDCTextField(document.getElementById('color-textfield')!);
@@ -393,6 +452,9 @@ async function main() {
     if (textfield_color.value !== app.color) {
       promises.push(tx.store.put(textfield_color.value, 'color'));
     }
+    const probabilities = parseProbabilityInputs();
+    app.probabilities = probabilities;
+    promises.push(tx.store.put(probabilities, 'probabilities'));
     if (promises.length > 0) {
       promises.push(tx.done);
       await Promise.all(promises);
