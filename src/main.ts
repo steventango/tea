@@ -176,6 +176,12 @@ class App {
       }
     }
 
+    if (!this.partitions[9] || this.partitions[9].length === 0) {
+      this.entry = null;
+      this.totalMistakes = 0;
+      return;
+    }
+
     let probabilities = [];
     let remainder = 1;
     for (let i = 0; i < this.partitions[9].length; i++) {
@@ -183,9 +189,8 @@ class App {
       remainder /= 2;
     }
     probabilities = probabilities.reverse();
-    const r = weightedRandom(this.getNormalizedProbabilities());
-    const entry = this.partitions[9][r];
-    this.partitions[9].splice(r);
+    const r = weightedRandom(this.getNormalizedProbabilities(probabilities));
+    const entry = this.partitions[9].splice(r, 1)[0] || null;
     this.entry = entry;
     this.totalMistakes = 0;
   }
@@ -223,9 +228,9 @@ class App {
       tx.objectStore('partition-lengths').get('buffer') as Promise<number>
     ]);
     const partitions = await Promise.all(promises.map(async (p) => await Promise.all(p)));
-    this.partitions = partitions.map(([p, ]) => p);
-    this.partition_lengths = partitions.map(([, l]) => l);
-    this.buffer_size = await this.db.get('config', 'buffer_size');
+    this.partitions = partitions.map(([partition, ]) => partition || []);
+    this.partition_lengths = partitions.map(([, length]) => length || 0);
+    this.buffer_size = (await this.db.get('config', 'buffer_size')) || 100;
     await Promise.all([
       this.updateProbability(),
       this.updateType(),
@@ -307,8 +312,8 @@ class App {
     }
   }
 
-  private getNormalizedProbabilities() {
-    const sanitized = this.probabilities.map((probability) => {
+  private getNormalizedProbabilities(probabilities: Array<number> = this.probabilities) {
+    const sanitized = probabilities.map((probability) => {
       if (Number.isFinite(probability) && probability >= 0) {
         return probability;
       }
@@ -372,6 +377,12 @@ class App {
       if (this.char_queue.length === 0) {
         await this.nextEntry();
         await this.updateBuffer();
+        if (!this.entry) {
+          await this.nextEntry();
+        }
+        if (!this.entry) {
+          return;
+        }
         this.updateEntry();
         this.updateProgress();
       }
