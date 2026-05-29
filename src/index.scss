@@ -67,6 +67,16 @@ main,
   font-family: 'Noto Serif TC', 'Noto Serif SC', serif;
   .mdc-list-item {
     margin-bottom: .2em;
+    height: auto;
+    min-height: 1.5em;
+    align-items: flex-start;
+    white-space: normal;
+  }
+  .mdc-list-item__text {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.35;
   }
 }
 
@@ -85,19 +95,22 @@ main,
   }
 }
 
-#panel {
-  max-height: 100vh;
-
-  #definitions {
-    overflow-y: auto;
-    flex: 1 1 0;
-  }
-}
-
 #button {
   position: absolute;
   top: 1em;
   right: 1em;
+}
+
+#panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#panel #definitions {
+  min-height: 0;
+  overflow-y: auto;
+  flex: 1 1 auto;
 }
 
 .textfield--two {
@@ -106,10 +119,35 @@ main,
 }
 
 @media (max-width: 839px) {
+  .mdc-layout-grid__inner {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+    min-height: 100%;
+    height: 100%;
+  }
+
+  .mdc-layout-grid__cell {
+    min-height: 0;
+  }
+
   #panel {
-    min-height: 33.3%;
-    flex: 0 1 0;
     display: flex;
     flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  #panel #definitions {
+    min-height: 0;
+    overflow-y: auto;
+    flex: 1 1 auto;
+  }
+
+  #target {
+    height: min(100vw, 100vh);
+    width: min(100vw, 100vh);
+    margin-top: auto;
   }
 }
