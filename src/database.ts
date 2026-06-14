@@ -90,7 +90,15 @@ export default class Database {
 
   async setup_partitions() {
     if (await this.db!.count('partitions') < 1) {
-      let response = await fetch('https://cdn.jsdelivr.net/gh/steventango/tea-data/partitions.json');
+      let response;
+      try {
+        response = await fetch('https://cdn.jsdelivr.net/gh/steventango/tea-data/partitions.json');
+        if (!response.ok) {
+          throw new Error('Primary fetch failed');
+        }
+      } catch (e) {
+        response = await fetch('https://raw.githubusercontent.com/steventango/tea-data/refs/heads/master/partitions.json');
+      }
       let data = await response.json() as Partitions;
 
       const tx = this.db!.transaction(['partitions', 'partition-lengths'], 'readwrite');
