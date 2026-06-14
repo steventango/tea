@@ -4,10 +4,89 @@ import { MDCLinearProgress } from '@material/linear-progress';
 import Database, { DB, PartitionElement } from './database';
 import { IDBPDatabase } from 'idb';
 import { weightedRandom, sample } from './util';
-import {MDCDialog} from '@material/dialog';
-import {MDCSlider} from '@material/slider';
+import { MDCDialog } from '@material/dialog';
+import { MDCSlider } from '@material/slider';
 import { MDCTextField } from '@material/textfield';
 import Panel from './panel';
+
+
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  getDocs,
+  persistentLocalCache,
+  initializeFirestore,
+  Firestore,
+  CACHE_SIZE_UNLIMITED,
+} from 'firebase/firestore';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAIMe-Az44DkEy9D645Oed9MzWrfHwnehk",
+  authDomain: "tea-6ddcb.firebaseapp.com",
+  projectId: "tea-6ddcb",
+  storageBucket: "tea-6ddcb.appspot.com",
+  messagingSenderId: "341463323384",
+  appId: "1:341463323384:web:b2b018411f31f8847d610d"
+};
+
+import { doc, setDoc } from "firebase/firestore";
+
+
+const app = initializeApp(firebaseConfig);
+
+const auth = getAuth();
+
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    console.log(user);
+    const uid = user.uid;
+    // Add a new document in collection "users"
+    await setDoc(doc(db, "users", uid, "words", "ada"), {
+      word: "Ada",
+      correct: 0,
+      seen: 0,
+      last_seen: new Date()
+    });
+    await setDoc(doc(db, "users", uid), {
+      hex: "Boo",
+      distribution: "Loo"
+    });
+    if (user.isAnonymous) {
+      const provider = new GoogleAuthProvider()
+      await linkWithPopup(user, provider);
+      console.log('linked with google');
+    }
+  } else {
+    await signInAnonymously(auth);
+    console.log('signed in anonymously');
+  }
+});
+
+import { GoogleAuthProvider, linkWithPopup } from "firebase/auth";
+
+
+auth.useDeviceLanguage();
+
+initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    cacheSizeBytes: CACHE_SIZE_UNLIMITED,
+  })
+});
+
+const db = getFirestore(app);
+import { CharacterJson } from 'hanzi-writer';
+interface HanziWriterData {
+  [id: string]: CharacterJson
+}
+
+// new plan let's just keep hanzi-writer data and dictionary locally, dumb to write it to the DB
+
+// data
+
+// add hanzi-writer-data to db
 
 
 const linearProgress = new MDCLinearProgress(document.querySelector('.mdc-linear-progress')!);
@@ -16,7 +95,7 @@ const linearProgress = new MDCLinearProgress(document.querySelector('.mdc-linear
 class App {
   char_queue: Array<string>;
   color: string;
-  entry: PartitionElement|null;
+  entry: PartitionElement | null;
   enable_outline: boolean;
   writer: HanziWriter;
   db: IDBPDatabase<DB>;
@@ -26,7 +105,7 @@ class App {
   partitions: Array<Array<PartitionElement>>;
   partition_lengths: Array<number>;
   probabilities: Array<number>;
-  type: 't'|'s';
+  type: 't' | 's';
   buffer_size: number;
   totalMistakes: number;
 
@@ -162,10 +241,10 @@ class App {
       .map((partition) => partition.length)
       .filter((v, i) => this.probabilities[i] > 0 ? v : 0)
       .reduce((a, b) => a + b, 0) +
-    this.partitions[9]
-      .filter((v) => v.h ? (this.probabilities[v.h] > 0 ? 1 : 0) : (this.probabilities[0] > 0 ? 1 : 0))
-      .length;
-      console.log(notDone, total);
+      this.partitions[9]
+        .filter((v) => v.h ? (this.probabilities[v.h] > 0 ? 1 : 0) : (this.probabilities[0] > 0 ? 1 : 0))
+        .length;
+    console.log(notDone, total);
     linearProgress.progress = 1 - notDone / total;
   }
 
@@ -187,7 +266,7 @@ class App {
       tx.objectStore('partition-lengths').get('buffer') as Promise<number>
     ]);
     const partitions = await Promise.all(promises.map(async (p) => await Promise.all(p)));
-    this.partitions = partitions.map(([p, ]) => p);
+    this.partitions = partitions.map(([p,]) => p);
     this.partition_lengths = partitions.map(([, l]) => l);
     this.buffer_size = await this.db.get('config', 'buffer_size');
     await Promise.all([
