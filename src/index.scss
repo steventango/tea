@@ -1178,22 +1178,6 @@ main,
   margin-left: auto;
 }
 
-.auth-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  cursor: pointer;
-  object-fit: cover;
-  border: 2px solid var(--mdc-theme-primary);
-  padding: 2px;
-  background: var(--mdc-theme-background);
-  transition: transform 0.2s ease;
-  
-  &:hover {
-    transform: scale(1.05);
-  }
-}
-
 @media (max-width: 900px) {
   html,
   body,

@@ -590,13 +590,11 @@ class App {
 
 function updateAuthUI(user: import('firebase/auth').User | null) {
   const authBtn = document.getElementById('auth-button');
-  const authAvatar = document.getElementById('auth-avatar') as HTMLImageElement | null;
+  const authAvatar = document.getElementById('auth-avatar');
 
   if (user) {
     if (authBtn) authBtn.style.display = 'none';
     if (authAvatar) {
-      authAvatar.src = user.photoURL || '';
-      authAvatar.alt = user.displayName || 'User';
       authAvatar.style.display = '';
     }
   } else {
