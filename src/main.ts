@@ -593,17 +593,6 @@ class App {
 function updateAuthUI(user: import('firebase/auth').User | null, status?: SyncStatus) {
   const authBtn = document.getElementById('auth-button');
   const authAvatar = document.getElementById('auth-avatar');
-  const syncDot = document.getElementById('sync-status-dot');
-
-  if (syncDot && status) {
-    syncDot.className = 'sync-status-dot';
-    switch (status) {
-      case 'syncing': syncDot.classList.add('sync-status--syncing'); syncDot.title = 'Syncing\u2026'; break;
-      case 'synced': syncDot.classList.add('sync-status--synced'); syncDot.title = 'Synced'; break;
-      case 'error': syncDot.classList.add('sync-status--error'); syncDot.title = 'Sync error'; break;
-      default: syncDot.classList.add('sync-status--idle'); syncDot.title = 'Not synced'; break;
-    }
-  }
 
   if (user) {
     if (authBtn) authBtn.style.display = 'none';

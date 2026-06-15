@@ -1178,35 +1178,7 @@ main,
   margin-left: auto;
 }
 
-.sync-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: 4px;
-  transition: background-color 0.3s ease;
-}
 
-.sync-status--idle {
-  background-color: #9e9e9e;
-}
-
-.sync-status--syncing {
-  background-color: #ff9800;
-  animation: sync-pulse 1s ease-in-out infinite;
-}
-
-.sync-status--synced {
-  background-color: #4caf50;
-}
-
-.sync-status--error {
-  background-color: #f44336;
-}
-
-@keyframes sync-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
 
 @media (max-width: 900px) {
   html,
