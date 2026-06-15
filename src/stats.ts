@@ -1129,10 +1129,11 @@ async function main() {
       }
       await tx.done;
       
-      // Prevent reload loop by checking if we already reloaded due to sync in this page load session
-      const syncReloadKey = 'stats_sync_reloaded';
-      if (!sessionStorage.getItem(syncReloadKey)) {
-        sessionStorage.setItem(syncReloadKey, 'true');
+      // Prevent reload loop by checking if we already reloaded due to sync recently
+      const lastReloadTime = sessionStorage.getItem('stats_last_sync_reload_time');
+      const now = Date.now();
+      if (!lastReloadTime || now - parseInt(lastReloadTime, 10) > 10000) {
+        sessionStorage.setItem('stats_last_sync_reload_time', String(now));
         location.reload();
       }
     }
