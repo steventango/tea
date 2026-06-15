@@ -588,20 +588,9 @@ class App {
   }
 }
 
-function updateAuthUI(user: import('firebase/auth').User | null, status: SyncStatus) {
+function updateAuthUI(user: import('firebase/auth').User | null) {
   const authBtn = document.getElementById('auth-button');
   const authAvatar = document.getElementById('auth-avatar') as HTMLImageElement | null;
-  const syncDot = document.getElementById('sync-status-dot');
-
-  if (syncDot) {
-    syncDot.className = 'sync-status-dot';
-    switch (status) {
-      case 'syncing': syncDot.classList.add('sync-status--syncing'); syncDot.title = 'Syncing…'; break;
-      case 'synced': syncDot.classList.add('sync-status--synced'); syncDot.title = 'Synced'; break;
-      case 'error': syncDot.classList.add('sync-status--error'); syncDot.title = 'Sync error'; break;
-      default: syncDot.classList.add('sync-status--idle'); syncDot.title = 'Not synced'; break;
-    }
-  }
 
   if (user) {
     if (authBtn) authBtn.style.display = 'none';
@@ -629,11 +618,8 @@ async function main() {
   app.render();
 
   // --- Auth UI wiring ---
-  let currentSyncStatus: SyncStatus = 'idle';
-
   app.syncEngine.onStatusChange((status) => {
-    currentSyncStatus = status;
-    updateAuthUI(getCurrentUser(), status);
+    // Current sync status could be tracked here if needed in the future
   });
 
   const authBtn = document.getElementById('auth-button');
@@ -654,9 +640,8 @@ async function main() {
   }
 
   onAuthChanged(async (user) => {
-    updateAuthUI(user, currentSyncStatus);
+    updateAuthUI(user);
     if (user) {
-      // Full sync on sign-in
       const modifiedKeys = await app.syncEngine.fullSync(app.partitions, (i) => app.getPartitionKey(i));
       if (modifiedKeys.size > 0) {
         const tx = db.transaction('partitions', 'readwrite');
@@ -671,8 +656,7 @@ async function main() {
     }
   });
 
-  // Initialize auth UI state
-  updateAuthUI(getCurrentUser(), currentSyncStatus);
+  updateAuthUI(getCurrentUser());
 
   const sourceInputs = probabilityFields.map((name) =>
     document.getElementById(`probability-${name}`)! as HTMLInputElement

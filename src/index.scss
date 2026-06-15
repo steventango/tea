@@ -218,17 +218,18 @@ main,
   }
 }
 
-#button {
+#top-right-actions {
   position: absolute;
   top: 1em;
   right: 1em;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  z-index: 100;
 }
 
-#stats-button {
+#button, #stats-button {
   text-decoration: none;
-  position: absolute;
-  top: 1em;
-  right: 4em;
 }
 
 #learned-stats-page {
@@ -1171,13 +1172,6 @@ main,
   position: relative;
   display: flex;
   align-items: center;
-  z-index: 100;
-}
-
-body > main > .auth-container {
-  position: absolute;
-  top: 1.2em;
-  right: 7.2em;
 }
 
 .stats-topbar .auth-container {
@@ -1198,93 +1192,6 @@ body > main > .auth-container {
   &:hover {
     transform: scale(1.05);
   }
-}
-
-.auth-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 0.5rem;
-  background: var(--mdc-theme-background);
-  border: 1px solid color-mix(in srgb, var(--mdc-theme-primary) 12%, transparent);
-  border-radius: 8px;
-  box-shadow: 0 4px 14px -3px color-mix(in srgb, #000 10%, transparent);
-  display: none;
-  flex-direction: column;
-  min-width: 150px;
-  overflow: hidden;
-}
-
-.auth-menu--open {
-  display: flex;
-}
-
-.auth-menu-name {
-  padding: 0.75rem 1rem;
-  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--mdc-theme-primary);
-  border-bottom: 1px solid color-mix(in srgb, var(--mdc-theme-primary) 10%, transparent);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
-}
-
-.auth-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border: none;
-  background: transparent;
-  color: color-mix(in srgb, var(--mdc-theme-primary) 80%, transparent);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  text-align: left;
-  transition: background-color 0.2s;
-  
-  &:hover {
-    background-color: color-mix(in srgb, var(--mdc-theme-primary) 5%, transparent);
-    color: var(--mdc-theme-primary);
-  }
-  
-  .material-icons {
-    font-size: 1.1rem;
-  }
-}
-
-.sync-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: 0.5rem;
-  background-color: transparent;
-  transition: background-color 0.3s ease;
-}
-
-.sync-status--idle {
-  display: none;
-}
-
-.sync-status--syncing {
-  background-color: #f59e0b;
-  animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-.sync-status--synced {
-  background-color: #10b981;
-}
-
-.sync-status--error {
-  background-color: #ef4444;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
 }
 
 @media (max-width: 900px) {

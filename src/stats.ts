@@ -1043,20 +1043,9 @@ function sortEntries<T extends PartitionElement>(
   }) as Array<T>;
 }
 
-function updateAuthUI(user: import('firebase/auth').User | null, status: SyncStatus) {
+function updateAuthUI(user: import('firebase/auth').User | null) {
   const authBtn = document.getElementById('auth-button');
   const authAvatar = document.getElementById('auth-avatar') as HTMLImageElement | null;
-  const syncDot = document.getElementById('sync-status-dot');
-
-  if (syncDot) {
-    syncDot.className = 'sync-status-dot';
-    switch (status) {
-      case 'syncing': syncDot.classList.add('sync-status--syncing'); syncDot.title = 'Syncing…'; break;
-      case 'synced': syncDot.classList.add('sync-status--synced'); syncDot.title = 'Synced'; break;
-      case 'error': syncDot.classList.add('sync-status--error'); syncDot.title = 'Sync error'; break;
-      default: syncDot.classList.add('sync-status--idle'); syncDot.title = 'Not synced'; break;
-    }
-  }
 
   if (user) {
     if (authBtn) authBtn.style.display = 'none';
@@ -1076,12 +1065,10 @@ async function main() {
   const db = dbObj.db!;
 
   // --- Auth UI wiring ---
-  let currentSyncStatus: SyncStatus = 'idle';
   const syncEngine = new SyncEngine();
 
   syncEngine.onStatusChange((status) => {
-    currentSyncStatus = status;
-    updateAuthUI(getCurrentUser(), status);
+    // Current sync status could be tracked here if needed in the future
   });
 
   const authBtn = document.getElementById('auth-button');
@@ -1145,13 +1132,13 @@ async function main() {
   };
 
   onAuthChanged(async (user) => {
-    updateAuthUI(user, currentSyncStatus);
+    updateAuthUI(user);
     if (user) {
       await triggerFullSync();
     }
   });
 
-  updateAuthUI(getCurrentUser(), currentSyncStatus);
+  updateAuthUI(getCurrentUser());
 
   
   try {
