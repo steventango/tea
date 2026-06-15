@@ -19,6 +19,9 @@ registerRoute(
 );
 
 registerRoute(
-  ({url}) => !url.pathname.endsWith('.json') && !url.pathname.endsWith('sw.js'),
+  ({url}) => !url.pathname.endsWith('.json') && !url.pathname.endsWith('sw.js') &&
+             !url.hostname.includes('googleapis.com') &&
+             !url.hostname.includes('firebaseio.com') &&
+             !url.hostname.includes('firebaseapp.com'),
   new StaleWhileRevalidate()
 );

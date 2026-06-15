@@ -1010,7 +1010,7 @@ async function addToLearningQueue(db: IDBPDatabase<DB>, entry: PartitionElement,
   await lengthStore.put(next.length, 'buffer');
   await tx.done;
   
-  syncEngine.queueUpload(clone, 'buffer');
+  syncEngine.queueUpload(clone);
 
   return true;
 }
@@ -1071,8 +1071,10 @@ async function main() {
   // --- Auth UI wiring ---
   const syncEngine = new SyncEngine();
 
+  let currentSyncStatus: SyncStatus = syncEngine.getStatus();
   syncEngine.onStatusChange((status) => {
-    // Current sync status could be tracked here if needed in the future
+    currentSyncStatus = status;
+    updateAuthUI(getCurrentUser());
   });
 
   const authBtn = document.getElementById('auth-button');
@@ -1086,39 +1088,35 @@ async function main() {
 
   if (authAvatar) {
     authAvatar.addEventListener('click', async () => {
-      if (confirm('Sign out?')) {
-        await signOut();
-      }
+      await signOut();
     });
   }
 
   const triggerFullSync = async () => {
-    // Read all partitions from DB again to ensure we have latest local changes
+    // Read all partitions from DB
     const readTx = db.transaction('partitions', 'readonly');
-    const localPartitions = await Promise.all(
-      WORDSET_PARTITIONS.map((partitionKey) => readTx.objectStore('partitions').get(partitionKey))
-    );
+    const store = readTx.objectStore('partitions');
+
+    // Build the partitions array in the same layout as main.ts:
+    // indices 0-7 = partition keys '0'-'7'
+    // index 8 = 'learned'
+    // index 9 = 'buffer'
+    const syncPartitions: Array<Array<PartitionElement>> = [];
+    for (let i = 0; i < 8; i++) {
+      const data = await store.get(i.toString());
+      syncPartitions.push((data as PartitionElement[]) || []);
+    }
+    const learned = await store.get('learned');
+    syncPartitions.push((learned as PartitionElement[]) || []); // index 8
+    const buffer = await store.get('buffer');
+    syncPartitions.push((buffer as PartitionElement[]) || []); // index 9
     await readTx.done;
-    
-    // We also need the buffer
-    const buffer = await db.get('partitions', 'buffer');
-    
-    // Construct partitions array to pass to fullSync
-    const partitionsArray = [...localPartitions];
-    partitionsArray.splice(8, 0, buffer || []); // buffer is at index 9, learned is at index 8. But wait, WORDSET_PARTITIONS ends with 'learned'. So index 8 is learned.
-    
-    // Since we need getPartitionKey to match...
+
     const getPartitionKey = (i: number) => {
       if (i === 8) return 'learned';
       if (i === 9) return 'buffer';
       return String(i);
     };
-
-    // Construct array of exactly length 10
-    const syncPartitions = [];
-    for (let i = 0; i < 8; i++) syncPartitions.push(localPartitions[i] || []);
-    syncPartitions.push(localPartitions[8] || []); // learned
-    syncPartitions.push(buffer || []); // buffer
 
     const modifiedKeys = await syncEngine.fullSync(syncPartitions, getPartitionKey);
     if (modifiedKeys.size > 0) {
