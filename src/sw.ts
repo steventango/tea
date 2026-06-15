@@ -19,6 +19,6 @@ registerRoute(
 );
 
 registerRoute(
-  ({url}) => !url.pathname.endsWith('.json'),
+  ({url}) => !url.pathname.endsWith('.json') && !url.pathname.endsWith('sw.js'),
   new StaleWhileRevalidate()
 );
