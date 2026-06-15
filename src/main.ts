@@ -772,7 +772,7 @@ async function main() {
   if (process.env.NODE_ENV === 'production') {
     if ('serviceWorker' in navigator) {
       try {
-        const registration = await navigator.serviceWorker.register('/sw.js')
+        const registration = await navigator.serviceWorker.register('./sw.js')
         console.log('Service worker registration succeeded:', registration);
       } catch (error) {
         console.log('Service worker registration failed:', error);
