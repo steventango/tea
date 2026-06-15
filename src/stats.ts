@@ -3,6 +3,8 @@ import { IDBPDatabase } from 'idb';
 import Fuse from 'fuse.js';
 import { MDCChipSet } from '@material/chips';
 import Color from 'color';
+import { signInWithGoogle, signOut, onAuthChanged, getCurrentUser } from './firebase';
+import { SyncEngine, SyncStatus } from './sync';
 
 const PAGE_SIZE = 100;
 const SEARCH_RESULT_LIMIT = 2200;
@@ -26,7 +28,7 @@ type SearchScope = 'all' | 'character' | 'simplified' | 'pinyin' | 'jyutping' | 
 
 const SEARCH_PLACEHOLDERS: Record<SearchScope, string> = {
   all: 'characters, pinyin, jyutping, definitions, HSK',
-  character: 'Chinese characters',
+  character: 'Chinese characters (traditional & simplified)',
   simplified: 'simplified characters',
   pinyin: 'pinyin (bai, laoshi, xiangjiao)',
   jyutping: 'jyutping (maa5, gong2)',
@@ -65,9 +67,9 @@ const SCOPE_PREFIXES: Record<string, SearchScope> = {
   char: 'character',
   character: 'character',
   c: 'character',
-  simp: 'simplified',
-  simplified: 'simplified',
-  s: 'simplified',
+  simp: 'character',
+  simplified: 'character',
+  s: 'character',
   p: 'pinyin',
   py: 'pinyin',
   pinyin: 'pinyin',
@@ -1041,9 +1043,101 @@ function sortEntries<T extends PartitionElement>(
   }) as Array<T>;
 }
 
+function updateAuthUI(user: import('firebase/auth').User | null) {
+  const authBtn = document.getElementById('auth-button');
+  const authAvatar = document.getElementById('auth-avatar');
+
+  if (user) {
+    if (authBtn) authBtn.style.display = 'none';
+    if (authAvatar) {
+      authAvatar.style.display = '';
+    }
+  } else {
+    if (authBtn) authBtn.style.display = '';
+    if (authAvatar) authAvatar.style.display = 'none';
+  }
+}
+
 async function main() {
   const dbObj = await Database.build();
   const db = dbObj.db!;
+
+  // --- Auth UI wiring ---
+  const syncEngine = new SyncEngine();
+
+  syncEngine.onStatusChange((status) => {
+    // Current sync status could be tracked here if needed in the future
+  });
+
+  const authBtn = document.getElementById('auth-button');
+  const authAvatar = document.getElementById('auth-avatar');
+
+  if (authBtn) {
+    authBtn.addEventListener('click', async () => {
+      await signInWithGoogle();
+    });
+  }
+
+  if (authAvatar) {
+    authAvatar.addEventListener('click', async () => {
+      if (confirm('Sign out?')) {
+        await signOut();
+      }
+    });
+  }
+
+  const triggerFullSync = async () => {
+    // Read all partitions from DB again to ensure we have latest local changes
+    const readTx = db.transaction('partitions', 'readonly');
+    const localPartitions = await Promise.all(
+      WORDSET_PARTITIONS.map((partitionKey) => readTx.objectStore('partitions').get(partitionKey))
+    );
+    await readTx.done;
+    
+    // We also need the buffer
+    const buffer = await db.get('partitions', 'buffer');
+    
+    // Construct partitions array to pass to fullSync
+    const partitionsArray = [...localPartitions];
+    partitionsArray.splice(8, 0, buffer || []); // buffer is at index 9, learned is at index 8. But wait, WORDSET_PARTITIONS ends with 'learned'. So index 8 is learned.
+    
+    // Since we need getPartitionKey to match...
+    const getPartitionKey = (i: number) => {
+      if (i === 8) return 'learned';
+      if (i === 9) return 'buffer';
+      return String(i);
+    };
+
+    // Construct array of exactly length 10
+    const syncPartitions = [];
+    for (let i = 0; i < 8; i++) syncPartitions.push(localPartitions[i] || []);
+    syncPartitions.push(localPartitions[8] || []); // learned
+    syncPartitions.push(buffer || []); // buffer
+
+    const modifiedKeys = await syncEngine.fullSync(syncPartitions, getPartitionKey);
+    if (modifiedKeys.size > 0) {
+      const tx = db.transaction('partitions', 'readwrite');
+      for (const key of modifiedKeys) {
+        const pi = key === 'learned' ? 8 : key === 'buffer' ? 9 : parseInt(key, 10);
+        if (pi >= 0 && pi < syncPartitions.length) {
+          await tx.store.put(syncPartitions[pi], key);
+        }
+      }
+      await tx.done;
+      // Reload the page to reflect synced changes in the stats view
+      location.reload();
+    }
+  };
+
+  onAuthChanged(async (user) => {
+    updateAuthUI(user);
+    if (user) {
+      await triggerFullSync();
+    }
+  });
+
+  updateAuthUI(getCurrentUser());
+
   
   try {
     const themeColor = await db.get('config', 'color');
@@ -1265,7 +1359,7 @@ async function main() {
   const scopeHint: Record<SearchScope, string> = {
     all: 'all',
     character: 'character',
-    simplified: 'simplified',
+    simplified: 'character',
     pinyin: 'p:',
     jyutping: 'j:',
     definition: 'e:',
@@ -1273,8 +1367,8 @@ async function main() {
   };
   const scopeLabel: Record<SearchScope, string> = {
     all: 'all fields',
-    character: 'character',
-    simplified: 'simplified',
+    character: 'Chinese characters',
+    simplified: 'Chinese characters',
     pinyin: 'pinyin',
     jyutping: 'jyutping',
     definition: 'definitions',

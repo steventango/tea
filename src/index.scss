@@ -218,17 +218,18 @@ main,
   }
 }
 
-#button {
+#top-right-actions {
   position: absolute;
   top: 1em;
   right: 1em;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  z-index: 100;
 }
 
-#stats-button {
+#button, #stats-button {
   text-decoration: none;
-  position: absolute;
-  top: 1em;
-  right: 4em;
 }
 
 #learned-stats-page {
@@ -1164,6 +1165,17 @@ main,
 
 .probability-control.mdc-text-field--invalid .mdc-checkbox .mdc-checkbox__native-control:enabled:not(:checked):not(:indeterminate):not([data-indeterminate='true']) ~ .mdc-checkbox__background {
   border-color: var(--invalid-color);
+}
+
+/* Auth UI Styles */
+.auth-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.stats-topbar .auth-container {
+  margin-left: auto;
 }
 
 @media (max-width: 900px) {

@@ -9,6 +9,8 @@ import {MDCDialog} from '@material/dialog';
 import {MDCCheckbox} from '@material/checkbox';
 import { MDCTextField } from '@material/textfield';
 import Panel from './panel';
+import { signInWithGoogle, signOut, onAuthChanged, getCurrentUser } from './firebase';
+import { SyncEngine, SyncStatus } from './sync';
 
 const linearProgress = new MDCLinearProgress(document.querySelector('.mdc-linear-progress')!);
 const probabilityFields = ['dictionary', 'hsk-1', 'hsk-2', 'hsk-3', 'hsk-4', 'hsk-5', 'hsk-6', 'hsk-7', 'learned'] as const;
@@ -49,9 +51,11 @@ class App {
   totalMistakes: number;
   currentCharacter: string | null;
   fallbackChar: string | null;
+  syncEngine: SyncEngine;
 
   constructor(db: IDBPDatabase<DB>) {
     this.enable_outline = false;
+    this.syncEngine = new SyncEngine();
     const target = document.getElementById('target')!;
     const size = Math.min(target.clientWidth, target.clientHeight);
     this.db = db;
@@ -154,6 +158,7 @@ class App {
       strength: 0,
       lastLearnedAt: 0,
       lastReviewedAt: 0,
+      updatedAt: 0,
     };
     if (!entry.stats) {
       entry.stats = base;
@@ -166,6 +171,7 @@ class App {
       strength: Number.isFinite(entry.stats.strength) ? Math.max(0, Math.min(1, entry.stats.strength)) : 0,
       lastLearnedAt: Number.isFinite(entry.stats.lastLearnedAt) ? Math.max(0, Math.floor(entry.stats.lastLearnedAt)) : 0,
       lastReviewedAt: Number.isFinite(entry.stats.lastReviewedAt) ? Math.max(0, Math.floor(entry.stats.lastReviewedAt)) : 0,
+      updatedAt: Number.isFinite(entry.stats.updatedAt) ? Math.max(0, Math.floor(entry.stats.updatedAt as number)) : 0,
     };
   }
 
@@ -179,10 +185,13 @@ class App {
       stats.failures += 1;
     }
     stats.lastReviewedAt = now;
+    stats.updatedAt = now;
     const accuracy = stats.attempts > 0 ? stats.successes / stats.attempts : 0;
     const volumeFactor = Math.min(1, stats.successes / 5);
     stats.strength = accuracy * volumeFactor;
     entry.stats = stats;
+    // Queue for cloud sync
+    this.syncEngine.queueUpload(entry);
   }
 
   updateEntry() {
@@ -579,6 +588,21 @@ class App {
   }
 }
 
+function updateAuthUI(user: import('firebase/auth').User | null) {
+  const authBtn = document.getElementById('auth-button');
+  const authAvatar = document.getElementById('auth-avatar');
+
+  if (user) {
+    if (authBtn) authBtn.style.display = 'none';
+    if (authAvatar) {
+      authAvatar.style.display = '';
+    }
+  } else {
+    if (authBtn) authBtn.style.display = '';
+    if (authAvatar) authAvatar.style.display = 'none';
+  }
+}
+
 async function main() {
   linearProgress.determinate = false;
   const dialog = new MDCDialog(document.querySelector('.mdc-dialog')!);
@@ -590,6 +614,47 @@ async function main() {
   await app.load();
   initializeProbabilityCheckboxes();
   app.render();
+
+  // --- Auth UI wiring ---
+  app.syncEngine.onStatusChange((status) => {
+    // Current sync status could be tracked here if needed in the future
+  });
+
+  const authBtn = document.getElementById('auth-button');
+  const authAvatar = document.getElementById('auth-avatar');
+
+  if (authBtn) {
+    authBtn.addEventListener('click', async () => {
+      await signInWithGoogle();
+    });
+  }
+
+  if (authAvatar) {
+    authAvatar.addEventListener('click', async () => {
+      if (confirm('Sign out?')) {
+        await signOut();
+      }
+    });
+  }
+
+  onAuthChanged(async (user) => {
+    updateAuthUI(user);
+    if (user) {
+      const modifiedKeys = await app.syncEngine.fullSync(app.partitions, (i) => app.getPartitionKey(i));
+      if (modifiedKeys.size > 0) {
+        const tx = db.transaction('partitions', 'readwrite');
+        for (const key of modifiedKeys) {
+          const pi = key === 'learned' ? 8 : key === 'buffer' ? 9 : parseInt(key, 10);
+          if (pi >= 0 && pi < app.partitions.length) {
+            await tx.store.put(app.partitions[pi], key);
+          }
+        }
+        await tx.done;
+      }
+    }
+  });
+
+  updateAuthUI(getCurrentUser());
 
   const sourceInputs = probabilityFields.map((name) =>
     document.getElementById(`probability-${name}`)! as HTMLInputElement
