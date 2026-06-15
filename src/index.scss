@@ -67,10 +67,123 @@ main,
   margin: 0
 }
 
+#target-wrapper {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+}
+
 #target {
   display: flex;
   justify-content: center;
   align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+#fallback-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+#fallback-prompt {
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  font-size: 1rem;
+  color: var(--mdc-theme-primary);
+  opacity: 0.7;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  z-index: 2;
+  pointer-events: auto;
+}
+
+.fallback-input-wrapper {
+  position: relative;
+  width: min(75vw, 75vh, 360px);
+  height: min(75vw, 75vh, 360px);
+  z-index: 2;
+  pointer-events: auto;
+  
+  #fallback-input {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: transparent;
+    text-align: center;
+    font-family: 'Noto Serif TC', 'Noto Serif SC', serif;
+    font-size: min(65vw, 65vh, 320px);
+    line-height: 1.2;
+    padding: 0;
+    margin: 0;
+    color: var(--mdc-theme-primary);
+    caret-color: var(--mdc-theme-secondary);
+    outline: none;
+    
+    &::placeholder {
+      color: var(--mdc-theme-surface);
+      opacity: 1;
+    }
+  }
+
+  .fallback-input-line {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background-color: var(--mdc-theme-surface);
+    transition: background-color 0.3s ease, transform 0.3s ease;
+  }
+  
+  #fallback-input:focus ~ .fallback-input-line {
+    background-color: var(--mdc-theme-secondary);
+    transform: scaleX(1.1);
+  }
+
+  #fallback-input.success ~ .fallback-input-line {
+    background-color: #4caf50;
+    transform: scaleX(1.2);
+  }
+}
+
+.fallback-skip-btn {
+  margin-top: 2rem;
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-radius: 8px;
+  border: 1px solid var(--mdc-theme-surface);
+  color: var(--mdc-theme-primary);
+  background: transparent;
+  padding: 0.6rem 2rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  z-index: 2;
+  pointer-events: auto;
+  
+  &:hover {
+    background-color: var(--mdc-theme-surface);
+    border-color: var(--mdc-theme-secondary);
+    color: var(--mdc-theme-primary);
+  }
+  
+  &:active {
+    transform: scale(0.95);
+  }
 }
 
 #definitions {
@@ -1087,10 +1200,14 @@ main,
     flex: 1 1 auto;
   }
 
-  #target {
+  #target-wrapper {
     height: min(100vw, 100vh);
     width: min(100vw, 100vh);
     margin-top: auto;
+  }
+  #target {
+    width: 100%;
+    height: 100%;
   }
 
   #learned-stats-page {

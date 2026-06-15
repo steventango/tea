@@ -47,12 +47,16 @@ class App {
   type: 't'|'s';
   buffer_size: number;
   totalMistakes: number;
+  currentCharacter: string | null;
+  fallbackChar: string | null;
 
   constructor(db: IDBPDatabase<DB>) {
     this.enable_outline = false;
     const target = document.getElementById('target')!;
     const size = Math.min(target.clientWidth, target.clientHeight);
     this.db = db;
+    this.currentCharacter = null;
+    this.fallbackChar = null;
     this.charDataLoader = (char, onLoad, onError) => {
       const p0 = performance.now()
       if (this.db.version > 0) {
@@ -94,20 +98,48 @@ class App {
       renderer: 'svg',
       onLoadCharDataError: (error) => {
         console.warn(error);
-        if (typeof this.writer._options.onComplete === 'function') {
-          this.writer._options.onComplete({
-            character: this.writer._char!,
-            totalMistakes: 0
-          });
-        } else {
-          setTimeout(() => {
-            this.update_writer().catch(console.error);
-          }, 0);
-        }
+        const char = this.currentCharacter || this.writer._char || '一';
+        this.showFallbackInput(char);
       }
     });
     this.defaultCharDataLoader = this.writer._options.charDataLoader!;
     this.writer._options.charDataLoader = this.charDataLoader;
+
+    const fallbackInput = document.getElementById('fallback-input') as HTMLInputElement;
+    if (fallbackInput) {
+      const handleFallbackSubmit = () => {
+        const val = fallbackInput.value.trim();
+        if (val && val === this.fallbackChar) {
+          fallbackInput.classList.add('success');
+          this.panel.phrase += this.fallbackChar;
+          setTimeout(() => {
+            fallbackInput.classList.remove('success');
+            fallbackInput.value = '';
+            this.hideFallbackInput();
+            this.update_writer().catch(console.error);
+          }, 500);
+        }
+      };
+
+      fallbackInput.addEventListener('input', handleFallbackSubmit);
+      fallbackInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          handleFallbackSubmit();
+        }
+      });
+    }
+
+    const skipBtn = document.getElementById('fallback-skip-btn');
+    if (skipBtn) {
+      skipBtn.addEventListener('click', () => {
+        if (this.fallbackChar) {
+          this.panel.phrase += this.fallbackChar;
+          this.hideFallbackInput();
+          this.update_writer().catch(console.error);
+        }
+      });
+    }
+
     window.addEventListener('resize', () => {
       this.resize();
     });
@@ -361,11 +393,26 @@ class App {
     document.documentElement.style.setProperty('--mdc-theme-background', colors.background);
     document.documentElement.style.setProperty('--mdc-theme-surface', colors.outline);
 
-    this.writer.updateColor('strokeColor', colors.stroke);
-    this.writer.updateColor('highlightColor', colors.highlight);
-    this.writer.updateColor('highlightCompleteColor', this.color);
-    this.writer.updateColor('outlineColor', colors.outline);
-    this.writer.updateColor('drawingColor', colors.primary);
+    if (this.writer && (this.writer as any)._character) {
+      try {
+        this.writer.updateColor('strokeColor', colors.stroke);
+        this.writer.updateColor('highlightColor', colors.highlight);
+        this.writer.updateColor('highlightCompleteColor', this.color);
+        this.writer.updateColor('outlineColor', colors.outline);
+        this.writer.updateColor('drawingColor', colors.primary);
+      } catch (error) {
+        console.warn('Skipping HanziWriter color updates until character data is loaded:', error);
+      }
+    } else if (this.writer) {
+      const opts = (this.writer as any)._options;
+      if (opts) {
+        opts.strokeColor = colors.stroke;
+        opts.highlightColor = colors.highlight;
+        opts.highlightCompleteColor = this.color;
+        opts.outlineColor = colors.outline;
+        opts.drawingColor = colors.primary;
+      }
+    }
   }
 
   async updateBuffer() {
@@ -472,7 +519,10 @@ class App {
         this.updateProgress();
       }
       try {
-        this.writer.setCharacter(this.char_queue.pop()!);
+        const char = this.char_queue.pop()!;
+        this.currentCharacter = char;
+        this.hideFallbackInput();
+        this.writer.setCharacter(char);
         if (this.entry?.correct && this.entry?.correct > 0) {
           this.writer.hideOutline();
         } else {
@@ -484,6 +534,39 @@ class App {
       }
     }
     this.writer.quiz();
+  }
+
+  showFallbackInput(char: string) {
+    const container = document.getElementById('fallback-container')!;
+    const input = document.getElementById('fallback-input')! as HTMLInputElement;
+
+    const svg = document.querySelector('#target svg') as HTMLElement;
+    if (svg) {
+      svg.style.display = 'none';
+    }
+
+    input.value = '';
+    input.placeholder = char;
+    container.style.display = 'flex';
+    this.fallbackChar = char;
+
+    setTimeout(() => {
+      input.focus();
+    }, 50);
+  }
+
+  hideFallbackInput() {
+    const container = document.getElementById('fallback-container')!;
+    const input = document.getElementById('fallback-input')! as HTMLInputElement;
+
+    container.style.display = 'none';
+    input.value = '';
+    this.fallbackChar = null;
+
+    const svg = document.querySelector('#target svg') as HTMLElement;
+    if (svg) {
+      svg.style.display = '';
+    }
   }
 
   resize() {
@@ -503,6 +586,7 @@ async function main() {
 
   const db = (await Database.build()).db!;
   const app = new App(db);
+  (window as any).app = app;
   await app.load();
   initializeProbabilityCheckboxes();
   app.render();
