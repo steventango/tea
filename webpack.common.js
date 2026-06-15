@@ -2,7 +2,10 @@ const path = require("path");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 
 module.exports = {
-  entry: ["./src/index.scss", "./src/main.ts"],
+  entry: {
+    main: ["./src/index.scss", "./src/main.ts"],
+    stats: "./src/stats.ts",
+  },
   module: {
     rules: [
       {
@@ -51,6 +54,12 @@ module.exports = {
   plugins: [
     new HtmlWebpackPlugin({
       template: "src/index.html",
+      chunks: ['main'],
+    }),
+    new HtmlWebpackPlugin({
+      template: "src/stats.html",
+      filename: "stats.html",
+      chunks: ['stats'],
     }),
   ],
 };

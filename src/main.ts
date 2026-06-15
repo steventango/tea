@@ -2,15 +2,33 @@ import HanziWriter, { CharDataLoaderFn } from 'hanzi-writer';
 import Color from 'color';
 import { MDCLinearProgress } from '@material/linear-progress';
 import Database, { DB, PartitionElement } from './database';
+import { LearningStats } from './dict';
 import { IDBPDatabase } from 'idb';
 import { weightedRandom, sample } from './util';
 import {MDCDialog} from '@material/dialog';
-import {MDCSlider} from '@material/slider';
+import {MDCCheckbox} from '@material/checkbox';
 import { MDCTextField } from '@material/textfield';
 import Panel from './panel';
 
-
 const linearProgress = new MDCLinearProgress(document.querySelector('.mdc-linear-progress')!);
+const probabilityFields = ['dictionary', 'hsk-1', 'hsk-2', 'hsk-3', 'hsk-4', 'hsk-5', 'hsk-6', 'hsk-7', 'learned'] as const;
+const defaultProbabilities = probabilityFields.map(() => 1 / probabilityFields.length);
+
+function parseProbabilityInputs() {
+  const probabilities: Array<number> = [];
+  for (const name of probabilityFields) {
+    const input = document.getElementById(`probability-${name}`)! as HTMLInputElement;
+    probabilities.push(input.checked ? 1 : 0);
+  }
+  return probabilities;
+}
+
+function initializeProbabilityCheckboxes() {
+  for (const name of probabilityFields) {
+    const input = document.getElementById(`probability-${name}`)! as HTMLInputElement;
+    new MDCCheckbox(input.closest('.mdc-checkbox')!);
+  }
+}
 
 
 class App {
@@ -45,8 +63,7 @@ class App {
               const p1 = performance.now()
               console.debug(`Load ${char} from db: ${p1 - p0} ms`);
             } else {
-              const error = new Error(`Couldn't find the requested char ${char} in hanzi-writer-data.`)
-              onError(error);
+              onError(new Error(`Couldn't find the requested char ${char} in hanzi-writer-data.`))
             }
           })
           .catch((error) => {
@@ -77,10 +94,16 @@ class App {
       renderer: 'svg',
       onLoadCharDataError: (error) => {
         console.warn(error);
-        this.writer._options!.onComplete!({
-          character: this.writer._char!,
-          totalMistakes: 0
-        });
+        if (typeof this.writer._options.onComplete === 'function') {
+          this.writer._options.onComplete({
+            character: this.writer._char!,
+            totalMistakes: 0
+          });
+        } else {
+          setTimeout(() => {
+            this.update_writer().catch(console.error);
+          }, 0);
+        }
       }
     });
     this.defaultCharDataLoader = this.writer._options.charDataLoader!;
@@ -91,27 +114,85 @@ class App {
     console.log(this);
   }
 
+  private getLearningStats(entry: PartitionElement): Required<LearningStats> {
+    const base: Required<LearningStats> = {
+      attempts: 0,
+      successes: 0,
+      failures: 0,
+      strength: 0,
+      lastLearnedAt: 0,
+      lastReviewedAt: 0,
+    };
+    if (!entry.stats) {
+      entry.stats = base;
+      return base;
+    }
+    return {
+      attempts: Number.isFinite(entry.stats.attempts) ? Math.max(0, Math.floor(entry.stats.attempts)) : 0,
+      successes: Number.isFinite(entry.stats.successes) ? Math.max(0, Math.floor(entry.stats.successes)) : 0,
+      failures: Number.isFinite(entry.stats.failures) ? Math.max(0, Math.floor(entry.stats.failures)) : 0,
+      strength: Number.isFinite(entry.stats.strength) ? Math.max(0, Math.min(1, entry.stats.strength)) : 0,
+      lastLearnedAt: Number.isFinite(entry.stats.lastLearnedAt) ? Math.max(0, Math.floor(entry.stats.lastLearnedAt)) : 0,
+      lastReviewedAt: Number.isFinite(entry.stats.lastReviewedAt) ? Math.max(0, Math.floor(entry.stats.lastReviewedAt)) : 0,
+    };
+  }
+
+  private recordEntryAttempt(entry: PartitionElement, success: boolean) {
+    const stats = this.getLearningStats(entry);
+    const now = Date.now();
+    stats.attempts += 1;
+    if (success) {
+      stats.successes += 1;
+    } else {
+      stats.failures += 1;
+    }
+    stats.lastReviewedAt = now;
+    const accuracy = stats.attempts > 0 ? stats.successes / stats.attempts : 0;
+    const volumeFactor = Math.min(1, stats.successes / 5);
+    stats.strength = accuracy * volumeFactor;
+    entry.stats = stats;
+  }
+
   updateEntry() {
     this.panel.phrase = '\xa0';
     this.char_queue.push(...this.entry![this.type].split('').reverse());
     this.panel.pinyin = this.entry!.p.join(', ');
     this.panel.jyutping = this.entry!.j.join(', ') || '\xa0';
 
-    const definitions = [];
-    for (const definition of this.entry!.d) {
-      definitions.push(definition
+    const definitions = Array.isArray(this.entry!.d)
+      ? this.entry!.d
+      : [this.entry!.d];
+
+    const normalizedDefinitions = [] as Array<string>;
+    for (const definition of definitions) {
+      normalizedDefinitions.push(definition
         .replaceAll(new RegExp(`[${this.entry!.t}]`, 'g'), '')
         .replaceAll(new RegExp(`[${this.entry!.s}]`, 'g'), '')
       );
     }
     if (this.entry!.h) {
-      definitions.push('HSK ' + this.entry!.h);
+      normalizedDefinitions.push('HSK ' + this.entry!.h);
     }
-    this.panel.definitions = definitions;
+
+    this.panel.definitions = normalizedDefinitions;
+  }
+
+  getPartitionKey(index: number): string {
+    if (index === 8) {
+      return 'learned';
+    }
+    if (index === 9) {
+      return 'buffer';
+    }
+    return index.toString();
   }
 
   async nextEntry() {
     if (this.entry) {
+      const now = Date.now();
+      const success = this.totalMistakes <= 1;
+      this.recordEntryAttempt(this.entry, success);
+
       if (this.totalMistakes <= 1) {
         const tx = this.db.transaction('partitions', 'readwrite');
         const promises = [];
@@ -121,6 +202,9 @@ class App {
           this.entry.correct++;
         }
         if (this.entry.correct >= 2) {
+          if (!this.entry.stats?.lastLearnedAt) {
+            this.entry.stats!.lastLearnedAt = now;
+          }
           this.partitions[8].push(this.entry);
           promises.push(tx.store.put(this.partitions[8], 'learned'));
         } else if (this.entry.correct >= 1) {
@@ -132,12 +216,19 @@ class App {
         }
         promises.push(tx.store.put(this.partitions[9], 'buffer'));
         promises.push(tx.done);
+        await Promise.all(promises);
       } else {
         this.entry.correct = 0;
         const index = Math.floor(this.partitions[9].length * 0.8);
         this.partitions[9].splice(index, 0, this.entry);
-        this.db.put('partitions', this.partitions[9], 'buffer');
+        await this.db.put('partitions', this.partitions[9], 'buffer');
       }
+    }
+
+    if (!this.partitions[9] || this.partitions[9].length === 0) {
+      this.entry = null;
+      this.totalMistakes = 0;
+      return;
     }
 
     let probabilities = [];
@@ -147,9 +238,8 @@ class App {
       remainder /= 2;
     }
     probabilities = probabilities.reverse();
-    const r = weightedRandom(probabilities);
-    const entry = this.partitions[9][r];
-    this.partitions[9].splice(r);
+    const r = weightedRandom(this.getNormalizedProbabilities(probabilities));
+    const entry = this.partitions[9].splice(r, 1)[0] || null;
     this.entry = entry;
     this.totalMistakes = 0;
   }
@@ -170,7 +260,33 @@ class App {
   }
 
   async load() {
-    const tx = this.db.transaction(['partitions', 'partition-lengths'], 'readonly');
+    const tx = this.db.transaction(['partitions', 'partition-lengths'], 'readwrite');
+    
+    // Backwards compatibility: load and merge legacy key '8' if it exists in partitions or partition-lengths
+    const legacyPartitionsPromise = tx.objectStore('partitions').get('8') as Promise<PartitionElement[] | undefined>;
+    const legacyLengthsPromise = tx.objectStore('partition-lengths').get('8') as Promise<number | undefined>;
+    const learnedPartitionsPromise = tx.objectStore('partitions').get('learned') as Promise<PartitionElement[] | undefined>;
+    
+    const [legacyPart, legacyLen, learnedPart] = await Promise.all([
+      legacyPartitionsPromise,
+      legacyLengthsPromise,
+      learnedPartitionsPromise,
+    ]);
+
+    let mergedLearned = learnedPart || [];
+    if (legacyPart && legacyPart.length > 0) {
+      const existing = new Set(mergedLearned.map(e => e.t));
+      for (const entry of legacyPart) {
+        if (!existing.has(entry.t)) {
+          mergedLearned.push(entry);
+        }
+      }
+      await tx.objectStore('partitions').put(mergedLearned, 'learned');
+      await tx.objectStore('partition-lengths').put(mergedLearned.length, 'learned');
+      await tx.objectStore('partitions').delete('8');
+      await tx.objectStore('partition-lengths').delete('8');
+    }
+
     const promises: [Promise<PartitionElement[]>, Promise<number>][] = [];
     for (let i = 0; i <= 7; i++) {
       promises.push([
@@ -179,17 +295,21 @@ class App {
       ]);
     }
     promises.push([
-      tx.objectStore('partitions').get('learned') as Promise<PartitionElement[]>,
-      tx.objectStore('partition-lengths').get('learned') as Promise<number>
+      Promise.resolve(mergedLearned),
+      Promise.resolve(mergedLearned.length)
     ]);
     promises.push([
       tx.objectStore('partitions').get('buffer') as Promise<PartitionElement[]>,
       tx.objectStore('partition-lengths').get('buffer') as Promise<number>
     ]);
+    
     const partitions = await Promise.all(promises.map(async (p) => await Promise.all(p)));
-    this.partitions = partitions.map(([p, ]) => p);
-    this.partition_lengths = partitions.map(([, l]) => l);
-    this.buffer_size = await this.db.get('config', 'buffer_size');
+    this.partitions = partitions.map(([partition, ]) => partition || []);
+    this.partition_lengths = partitions.map(([, length]) => length || 0);
+    this.buffer_size = (await this.db.get('config', 'buffer_size')) || 100;
+    
+    await tx.done;
+
     await Promise.all([
       this.updateProbability(),
       this.updateType(),
@@ -198,7 +318,19 @@ class App {
   }
 
   async updateProbability() {
-    this.probabilities = await this.db.get('config', 'probabilities');
+    const probabilities = await this.db.get('config', 'probabilities');
+    if (!probabilities || probabilities.length !== probabilityFields.length) {
+      this.probabilities = defaultProbabilities;
+      return;
+    }
+    const parsedProbabilities = probabilities.map((value: any) => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return Math.max(0, value);
+      }
+      return 0;
+    });
+    const hasProbabilities = parsedProbabilities.some((probability: number) => probability > 0);
+    this.probabilities = hasProbabilities ? parsedProbabilities : defaultProbabilities;
   }
 
   async updateType() {
@@ -239,10 +371,11 @@ class App {
     if (this.partitions[9].length < this.buffer_size) {
       const changed = new Set<number>();
       while (this.partitions[9].length < this.buffer_size) {
-        const partitioni = weightedRandom(this.probabilities);
+        const partitioni = weightedRandom(this.getNormalizedProbabilities());
         const partition = this.partitions[partitioni];
         const word = sample(partition);
         if (word) {
+          word.correct = 0; // Reset consecutive correct attempts upon entering the queue
           this.partitions[9].push(word);
           changed.add(partitioni);
         }
@@ -251,12 +384,26 @@ class App {
       const tx = this.db!.transaction('partitions', 'readwrite');
       const promises = []
       for (const c of changed) {
-        promises.push(tx.store.put(this.partitions[c], c.toString()));
+        promises.push(tx.store.put(this.partitions[c], this.getPartitionKey(c)));
       }
       promises.push(tx.store.put(this.partitions[9], 'buffer'));
       promises.push(tx.done);
-      Promise.all(promises);
+      await Promise.all(promises);
     }
+  }
+
+  private getNormalizedProbabilities(probabilities: Array<number> = this.probabilities) {
+    const sanitized = probabilities.map((probability) => {
+      if (Number.isFinite(probability) && probability >= 0) {
+        return probability;
+      }
+      return 0;
+    });
+    const sum = sanitized.reduce((total, probability) => total + probability, 0);
+    if (sanitized.length === 0 || sum <= 0) {
+      return defaultProbabilities;
+    }
+    return sanitized.map((probability) => probability / sum);
   }
 
   async flushBuffer() {
@@ -264,13 +411,14 @@ class App {
     while (this.partitions[9].length > 0) {
       const item = this.partitions[9].pop()!;
       let partition = -1;
-      if (item.h) {
-        this.partitions[item.h].push(item);
-        partition = item.h;
-      } else if (item.correct) {
-        if (item.correct > 1) {
-
-        }
+      const isLearned = (item.correct !== undefined && item.correct >= 2) || (item.stats?.lastLearnedAt || 0) > 0;
+      if (isLearned) {
+        this.partitions[8].push(item);
+        partition = 8;
+      } else {
+        const pIndex = item.h || 0;
+        this.partitions[pIndex].push(item);
+        partition = pIndex;
       }
       changed.add(partition);
     }
@@ -278,10 +426,13 @@ class App {
     const tx = this.db!.transaction('partitions', 'readwrite');
     const promises = []
     for (const c of changed) {
-      promises.push(tx.store.put(this.partitions[c], c.toString()));
+      if (c >= 0) {
+        promises.push(tx.store.put(this.partitions[c], this.getPartitionKey(c)));
+      }
     }
     promises.push(tx.store.put(this.partitions[9], 'buffer'));
     promises.push(tx.done);
+    await Promise.all(promises);
   }
 
   async render() {
@@ -310,6 +461,12 @@ class App {
       if (this.char_queue.length === 0) {
         await this.nextEntry();
         await this.updateBuffer();
+        if (!this.entry) {
+          await this.nextEntry();
+        }
+        if (!this.entry) {
+          return;
+        }
         this.updateEntry();
         this.updateProgress();
       }
@@ -346,7 +503,27 @@ async function main() {
   const db = (await Database.build()).db!;
   const app = new App(db);
   await app.load();
+  initializeProbabilityCheckboxes();
   app.render();
+
+  const sourceInputs = probabilityFields.map((name) =>
+    document.getElementById(`probability-${name}`)! as HTMLInputElement
+  );
+  const sourceControls = sourceInputs.map((input) => input.closest('.probability-control')!);
+
+  const setSourceSelectionError = (hasError: boolean) => {
+    for (const control of sourceControls) {
+      control.classList.toggle('mdc-text-field--invalid', hasError);
+    }
+  };
+
+  const hasSelectedSource = () => sourceInputs.some((input) => input.checked);
+
+  sourceInputs.forEach((input) => {
+    input.addEventListener('change', () => {
+      setSourceSelectionError(!hasSelectedSource());
+    });
+  });
 
   button.addEventListener('click', () => {
     dialog.open();
@@ -361,23 +538,31 @@ async function main() {
       radio_s.checked = true;
     }
     setTimeout(() => {
-      for (const [index, name] of ['dictionary', 'hsk-1', 'hsk-2', 'hsk-3', 'hsk-4', 'hsk-5', 'hsk-6', 'hsk-7', 'learned'].entries()) {
-        const slider = new MDCSlider(document.getElementById(`probability-${name}`)!);
-        slider.setValue(app.probabilities[index]);
+      setSourceSelectionError(false);
+      for (const [index, name] of probabilityFields.entries()) {
+        const checkbox = document.getElementById(`probability-${name}`)! as HTMLInputElement;
+        const value = app.probabilities[index] ?? defaultProbabilities[index];
+        checkbox.checked = value > 0;
       }
       const textfield_tolerance = new MDCTextField(document.getElementById('tolerance-textfield')!);
       const textfield_color = new MDCTextField(document.getElementById('color-textfield')!);
       textfield_color.value = app.color;
     }, 500);
   });
-  const close_button = dialog.root.querySelector('.mdc-dialog__close')! as HTMLElement;
-  close_button.addEventListener('click', () => {
-    dialog.close();
-  });
 
-  dialog.listen('MDCDialog:closing', async () => {
+  const applySettings = async () => {
     const radio_t = document.getElementById('radio-t')! as HTMLInputElement;
+    const probabilities = parseProbabilityInputs();
+    const selectedAnySource = probabilities.some((value) => value > 0);
+    if (!selectedAnySource) {
+      setSourceSelectionError(true);
+      return false;
+    }
+    setSourceSelectionError(false);
+
     const tx = db.transaction('config', 'readwrite');
+    const hadType = app.type;
+    const textfield_color = new MDCTextField(document.getElementById('color-textfield')!);
     const promises = [];
     if (radio_t.checked) {
       if (app.type !== 't') {
@@ -389,18 +574,46 @@ async function main() {
       promises.push(tx.store.put('t', 'simplified'));
     }
 
-    const textfield_color = new MDCTextField(document.getElementById('color-textfield')!);
     if (textfield_color.value !== app.color) {
       promises.push(tx.store.put(textfield_color.value, 'color'));
     }
+
+    const hadProbabilityChange = probabilities.some((value, index) => value !== app.probabilities[index]);
+    app.probabilities = probabilities;
+    promises.push(tx.store.put(probabilities, 'probabilities'));
     if (promises.length > 0) {
       promises.push(tx.done);
       await Promise.all(promises);
-      // only if color change
-      app.updateTheme();
+      if (app.color !== textfield_color.value || hadType !== app.type) {
+        await app.updateTheme();
+      }
+      if (hadProbabilityChange) {
+        await app.flushBuffer();
+        app.char_queue = [];
+        app.entry = null;
+        app.totalMistakes = 0;
+        await app.updateBuffer();
+        await app.update_writer();
+      }
+    }
+
+    return true;
+  };
+
+  const close_button = dialog.root.querySelector('.mdc-dialog__close')! as HTMLElement;
+  close_button.addEventListener('click', () => {
+    dialog.close();
+  });
+  const ok_button = dialog.root.querySelector('.mdc-dialog__button')! as HTMLElement;
+  ok_button.addEventListener('click', () => {
+    dialog.close();
+  });
+  dialog.listen('MDCDialog:closing', async (event: Event) => {
+    const shouldPersistSettings = await applySettings();
+    if (!shouldPersistSettings) {
+      event.preventDefault();
     }
   });
-  // on close write settings
 
 
   // const learned = await db.get('partitions', 'learned');

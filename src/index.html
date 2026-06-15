@@ -71,6 +71,13 @@
       </div>
     </div> -->
     <div class="mdc-touch-target-wrapper">
+      <a id="stats-button" class="mdc-icon-button mdc-icon-button--touch material-icons" href="stats.html">
+        <div class="mdc-icon-button__ripple"></div>
+        leaderboard
+        <div class="mdc-icon-button__touch"></div>
+      </a>
+    </div>
+    <div class="mdc-touch-target-wrapper">
       <button id="button" class="mdc-icon-button mdc-icon-button--touch material-icons">
         <div class="mdc-icon-button__ripple"></div>
         settings
@@ -113,8 +120,7 @@
           <h2 class="mdc-dialog__title" id="my-dialog-title">
             Settings
           </h2>
-          <button class="mdc-icon-button material-icons mdc-dialog__close"
-                  data-mdc-dialog-action="close">
+          <button class="mdc-icon-button material-icons mdc-dialog__close">
             close
           </button>
         </div>
@@ -144,123 +150,141 @@
             </div>
             <label for="radio-s">Simplified</label>
           </div>
-          <p>Next Character Probability</p>
-          <p>HSK 1</p>
-          <div class="mdc-slider" id="probability-hsk-1">
-            <input class="mdc-slider__input" type="range" min="0" max="1" value="0.111" step="0.001" name="probability-hsk-1" aria-label="Continuous slider for probability">
-            <div class="mdc-slider__track">
-              <div class="mdc-slider__track--inactive"></div>
-              <div class="mdc-slider__track--active">
-                <div class="mdc-slider__track--active_fill"></div>
+          <p>Sources</p>
+          <div class="probability-control mdc-form-field">
+            <div class="mdc-touch-target-wrapper">
+              <div class="mdc-checkbox mdc-checkbox--touch">
+                <input class="mdc-checkbox__native-control" type="checkbox" id="probability-hsk-1">
+                <div class="mdc-checkbox__background">
+                  <svg class="mdc-checkbox__checkmark" viewBox="0 0 24 24">
+                    <path class="mdc-checkbox__checkmark-path" fill="none" stroke="white" d="M1.73,12.91 8.1,19.28 22.6,4.78"></path>
+                  </svg>
+                  <div class="mdc-checkbox__mixedmark"></div>
+                </div>
+                <div class="mdc-checkbox__ripple"></div>
               </div>
             </div>
-            <div class="mdc-slider__thumb">
-              <div class="mdc-slider__thumb-knob"></div>
-            </div>
+            <label for="probability-hsk-1">HSK 1</label>
           </div>
-          <p>HSK 2</p>
-          <div class="mdc-slider" id="probability-hsk-2">
-            <input class="mdc-slider__input" type="range" min="0" max="1" value="0.111" step="0.001" name="probability-hsk-2" aria-label="Continuous slider for probability">
-            <div class="mdc-slider__track">
-              <div class="mdc-slider__track--inactive"></div>
-              <div class="mdc-slider__track--active">
-                <div class="mdc-slider__track--active_fill"></div>
+          <div class="probability-control mdc-form-field">
+            <div class="mdc-touch-target-wrapper">
+              <div class="mdc-checkbox mdc-checkbox--touch">
+                <input class="mdc-checkbox__native-control" type="checkbox" id="probability-hsk-2">
+                <div class="mdc-checkbox__background">
+                  <svg class="mdc-checkbox__checkmark" viewBox="0 0 24 24">
+                    <path class="mdc-checkbox__checkmark-path" fill="none" stroke="white" d="M1.73,12.91 8.1,19.28 22.6,4.78"></path>
+                  </svg>
+                  <div class="mdc-checkbox__mixedmark"></div>
+                </div>
+                <div class="mdc-checkbox__ripple"></div>
               </div>
             </div>
-            <div class="mdc-slider__thumb">
-              <div class="mdc-slider__thumb-knob"></div>
-            </div>
+            <label for="probability-hsk-2">HSK 2</label>
           </div>
-          <p>HSK 3</p>
-          <div class="mdc-slider" id="probability-hsk-3">
-            <input class="mdc-slider__input" type="range" min="0" max="1" value="0.111" step="0.001" name="probability-hsk-3" aria-label="Continuous slider for probability">
-            <div class="mdc-slider__track">
-              <div class="mdc-slider__track--inactive"></div>
-              <div class="mdc-slider__track--active">
-                <div class="mdc-slider__track--active_fill"></div>
+          <div class="probability-control mdc-form-field">
+            <div class="mdc-touch-target-wrapper">
+              <div class="mdc-checkbox mdc-checkbox--touch">
+                <input class="mdc-checkbox__native-control" type="checkbox" id="probability-hsk-3">
+                <div class="mdc-checkbox__background">
+                  <svg class="mdc-checkbox__checkmark" viewBox="0 0 24 24">
+                    <path class="mdc-checkbox__checkmark-path" fill="none" stroke="white" d="M1.73,12.91 8.1,19.28 22.6,4.78"></path>
+                  </svg>
+                  <div class="mdc-checkbox__mixedmark"></div>
+                </div>
+                <div class="mdc-checkbox__ripple"></div>
               </div>
             </div>
-            <div class="mdc-slider__thumb">
-              <div class="mdc-slider__thumb-knob"></div>
-            </div>
+            <label for="probability-hsk-3">HSK 3</label>
           </div>
-          <p>HSK 4</p>
-          <div class="mdc-slider" id="probability-hsk-4">
-            <input class="mdc-slider__input" type="range" min="0" max="1" value="0.111" step="0.001" name="probability-hsk-4" aria-label="Continuous slider for probability">
-            <div class="mdc-slider__track">
-              <div class="mdc-slider__track--inactive"></div>
-              <div class="mdc-slider__track--active">
-                <div class="mdc-slider__track--active_fill"></div>
+          <div class="probability-control mdc-form-field">
+            <div class="mdc-touch-target-wrapper">
+              <div class="mdc-checkbox mdc-checkbox--touch">
+                <input class="mdc-checkbox__native-control" type="checkbox" id="probability-hsk-4">
+                <div class="mdc-checkbox__background">
+                  <svg class="mdc-checkbox__checkmark" viewBox="0 0 24 24">
+                    <path class="mdc-checkbox__checkmark-path" fill="none" stroke="white" d="M1.73,12.91 8.1,19.28 22.6,4.78"></path>
+                  </svg>
+                  <div class="mdc-checkbox__mixedmark"></div>
+                </div>
+                <div class="mdc-checkbox__ripple"></div>
               </div>
             </div>
-            <div class="mdc-slider__thumb">
-              <div class="mdc-slider__thumb-knob"></div>
-            </div>
+            <label for="probability-hsk-4">HSK 4</label>
           </div>
-          <p>HSK 5</p>
-          <div class="mdc-slider" id="probability-hsk-5">
-            <input class="mdc-slider__input" type="range" min="0" max="1" value="0.111" step="0.001" name="probability-hsk-5" aria-label="Continuous slider for probability">
-            <div class="mdc-slider__track">
-              <div class="mdc-slider__track--inactive"></div>
-              <div class="mdc-slider__track--active">
-                <div class="mdc-slider__track--active_fill"></div>
+          <div class="probability-control mdc-form-field">
+            <div class="mdc-touch-target-wrapper">
+              <div class="mdc-checkbox mdc-checkbox--touch">
+                <input class="mdc-checkbox__native-control" type="checkbox" id="probability-hsk-5">
+                <div class="mdc-checkbox__background">
+                  <svg class="mdc-checkbox__checkmark" viewBox="0 0 24 24">
+                    <path class="mdc-checkbox__checkmark-path" fill="none" stroke="white" d="M1.73,12.91 8.1,19.28 22.6,4.78"></path>
+                  </svg>
+                  <div class="mdc-checkbox__mixedmark"></div>
+                </div>
+                <div class="mdc-checkbox__ripple"></div>
               </div>
             </div>
-            <div class="mdc-slider__thumb">
-              <div class="mdc-slider__thumb-knob"></div>
-            </div>
+            <label for="probability-hsk-5">HSK 5</label>
           </div>
-          <p>HSK 6</p>
-          <div class="mdc-slider" id="probability-hsk-6">
-            <input class="mdc-slider__input" type="range" min="0" max="1" value="0.111" step="0.001" name="probability-hsk-6" aria-label="Continuous slider for probability">
-            <div class="mdc-slider__track">
-              <div class="mdc-slider__track--inactive"></div>
-              <div class="mdc-slider__track--active">
-                <div class="mdc-slider__track--active_fill"></div>
+          <div class="probability-control mdc-form-field">
+            <div class="mdc-touch-target-wrapper">
+              <div class="mdc-checkbox mdc-checkbox--touch">
+                <input class="mdc-checkbox__native-control" type="checkbox" id="probability-hsk-6">
+                <div class="mdc-checkbox__background">
+                  <svg class="mdc-checkbox__checkmark" viewBox="0 0 24 24">
+                    <path class="mdc-checkbox__checkmark-path" fill="none" stroke="white" d="M1.73,12.91 8.1,19.28 22.6,4.78"></path>
+                  </svg>
+                  <div class="mdc-checkbox__mixedmark"></div>
+                </div>
+                <div class="mdc-checkbox__ripple"></div>
               </div>
             </div>
-            <div class="mdc-slider__thumb">
-              <div class="mdc-slider__thumb-knob"></div>
-            </div>
+            <label for="probability-hsk-6">HSK 6</label>
           </div>
-          <p>HSK 7-9</p>
-          <div class="mdc-slider" id="probability-hsk-7">
-            <input class="mdc-slider__input" type="range" min="0" max="1" value="0.111" step="0.001" name="probability-hsk-7" aria-label="Continuous slider for probability">
-            <div class="mdc-slider__track">
-              <div class="mdc-slider__track--inactive"></div>
-              <div class="mdc-slider__track--active">
-                <div class="mdc-slider__track--active_fill"></div>
+          <div class="probability-control mdc-form-field">
+            <div class="mdc-touch-target-wrapper">
+              <div class="mdc-checkbox mdc-checkbox--touch">
+                <input class="mdc-checkbox__native-control" type="checkbox" id="probability-hsk-7">
+                <div class="mdc-checkbox__background">
+                  <svg class="mdc-checkbox__checkmark" viewBox="0 0 24 24">
+                    <path class="mdc-checkbox__checkmark-path" fill="none" stroke="white" d="M1.73,12.91 8.1,19.28 22.6,4.78"></path>
+                  </svg>
+                  <div class="mdc-checkbox__mixedmark"></div>
+                </div>
+                <div class="mdc-checkbox__ripple"></div>
               </div>
             </div>
-            <div class="mdc-slider__thumb">
-              <div class="mdc-slider__thumb-knob"></div>
-            </div>
+            <label for="probability-hsk-7">HSK 7-9</label>
           </div>
-          <p>Dictionary</p>
-          <div class="mdc-slider" id="probability-dictionary">
-            <input class="mdc-slider__input" type="range" min="0" max="1" value="0.111" step="0.001" name="probability-dictionary" aria-label="Continuous slider for probability">
-            <div class="mdc-slider__track">
-              <div class="mdc-slider__track--inactive"></div>
-              <div class="mdc-slider__track--active">
-                <div class="mdc-slider__track--active_fill"></div>
+          <div class="probability-control mdc-form-field">
+            <div class="mdc-touch-target-wrapper">
+              <div class="mdc-checkbox mdc-checkbox--touch">
+                <input class="mdc-checkbox__native-control" type="checkbox" id="probability-dictionary">
+                <div class="mdc-checkbox__background">
+                  <svg class="mdc-checkbox__checkmark" viewBox="0 0 24 24">
+                    <path class="mdc-checkbox__checkmark-path" fill="none" stroke="white" d="M1.73,12.91 8.1,19.28 22.6,4.78"></path>
+                  </svg>
+                  <div class="mdc-checkbox__mixedmark"></div>
+                </div>
+                <div class="mdc-checkbox__ripple"></div>
               </div>
             </div>
-            <div class="mdc-slider__thumb">
-              <div class="mdc-slider__thumb-knob"></div>
-            </div>
+            <label for="probability-dictionary">Dictionary</label>
           </div>
-          <p>Learned</p>
-          <div class="mdc-slider" id="probability-learned">
-            <input class="mdc-slider__input" type="range" min="0" max="1" value="0.111" step="0.001" name="probability-dictionary" aria-label="Continuous slider for probability">
-            <div class="mdc-slider__track">
-              <div class="mdc-slider__track--inactive"></div>
-              <div class="mdc-slider__track--active">
-                <div class="mdc-slider__track--active_fill"></div>
+          <div class="probability-control mdc-form-field">
+            <div class="mdc-touch-target-wrapper">
+              <div class="mdc-checkbox mdc-checkbox--touch">
+                <input class="mdc-checkbox__native-control" type="checkbox" id="probability-learned">
+                <div class="mdc-checkbox__background">
+                  <svg class="mdc-checkbox__checkmark" viewBox="0 0 24 24">
+                    <path class="mdc-checkbox__checkmark-path" fill="none" stroke="white" d="M1.73,12.91 8.1,19.28 22.6,4.78"></path>
+                  </svg>
+                  <div class="mdc-checkbox__mixedmark"></div>
+                </div>
+                <div class="mdc-checkbox__ripple"></div>
               </div>
             </div>
-            <div class="mdc-slider__thumb">
-              <div class="mdc-slider__thumb-knob"></div>
-            </div>
+            <label for="probability-learned">Learned</label>
           </div>
           <div class="textfield--two">
             <label id="tolerance-textfield" class="mdc-text-field mdc-text-field--outlined">
@@ -288,7 +312,7 @@
         </div>
         <div class="mdc-dialog__actions">
           <button type="button" class="mdc-button mdc-dialog__button"
-                  data-mdc-dialog-action="ok">
+                  >
             <div class="mdc-button__ripple"></div>
             <span class="mdc-button__label">OK</span>
           </button>
