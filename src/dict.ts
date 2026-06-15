@@ -4,5 +4,14 @@ export interface DICT_entry {
   p: Array<string>;
   j: Array<string>;
   h?: number;
-  d: Array<string>;
+  d: string | Array<string>;
+}
+
+export interface LearningStats {
+  attempts: number;
+  successes: number;
+  failures: number;
+  strength: number;
+  lastLearnedAt: number;
+  lastReviewedAt: number;
 }

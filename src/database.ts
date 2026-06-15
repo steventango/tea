@@ -1,9 +1,10 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { CharacterJson } from 'hanzi-writer';
-import { DICT_entry } from './dict';
+import { DICT_entry, LearningStats } from './dict';
 
 export interface PartitionElement extends DICT_entry {
   correct?: number;
+  stats?: LearningStats;
 }
 
 interface Partitions {

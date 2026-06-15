@@ -2,6 +2,7 @@ import HanziWriter, { CharDataLoaderFn } from 'hanzi-writer';
 import Color from 'color';
 import { MDCLinearProgress } from '@material/linear-progress';
 import Database, { DB, PartitionElement } from './database';
+import { LearningStats } from './dict';
 import { IDBPDatabase } from 'idb';
 import { weightedRandom, sample } from './util';
 import {MDCDialog} from '@material/dialog';
@@ -113,27 +114,85 @@ class App {
     console.log(this);
   }
 
+  private getLearningStats(entry: PartitionElement): Required<LearningStats> {
+    const base: Required<LearningStats> = {
+      attempts: 0,
+      successes: 0,
+      failures: 0,
+      strength: 0,
+      lastLearnedAt: 0,
+      lastReviewedAt: 0,
+    };
+    if (!entry.stats) {
+      entry.stats = base;
+      return base;
+    }
+    return {
+      attempts: Number.isFinite(entry.stats.attempts) ? Math.max(0, Math.floor(entry.stats.attempts)) : 0,
+      successes: Number.isFinite(entry.stats.successes) ? Math.max(0, Math.floor(entry.stats.successes)) : 0,
+      failures: Number.isFinite(entry.stats.failures) ? Math.max(0, Math.floor(entry.stats.failures)) : 0,
+      strength: Number.isFinite(entry.stats.strength) ? Math.max(0, Math.min(1, entry.stats.strength)) : 0,
+      lastLearnedAt: Number.isFinite(entry.stats.lastLearnedAt) ? Math.max(0, Math.floor(entry.stats.lastLearnedAt)) : 0,
+      lastReviewedAt: Number.isFinite(entry.stats.lastReviewedAt) ? Math.max(0, Math.floor(entry.stats.lastReviewedAt)) : 0,
+    };
+  }
+
+  private recordEntryAttempt(entry: PartitionElement, success: boolean) {
+    const stats = this.getLearningStats(entry);
+    const now = Date.now();
+    stats.attempts += 1;
+    if (success) {
+      stats.successes += 1;
+    } else {
+      stats.failures += 1;
+    }
+    stats.lastReviewedAt = now;
+    const accuracy = stats.attempts > 0 ? stats.successes / stats.attempts : 0;
+    const volumeFactor = Math.min(1, stats.successes / 5);
+    stats.strength = accuracy * volumeFactor;
+    entry.stats = stats;
+  }
+
   updateEntry() {
     this.panel.phrase = '\xa0';
     this.char_queue.push(...this.entry![this.type].split('').reverse());
     this.panel.pinyin = this.entry!.p.join(', ');
     this.panel.jyutping = this.entry!.j.join(', ') || '\xa0';
 
-    const definitions = [];
-    for (const definition of this.entry!.d) {
-      definitions.push(definition
+    const definitions = Array.isArray(this.entry!.d)
+      ? this.entry!.d
+      : [this.entry!.d];
+
+    const normalizedDefinitions = [] as Array<string>;
+    for (const definition of definitions) {
+      normalizedDefinitions.push(definition
         .replaceAll(new RegExp(`[${this.entry!.t}]`, 'g'), '')
         .replaceAll(new RegExp(`[${this.entry!.s}]`, 'g'), '')
       );
     }
     if (this.entry!.h) {
-      definitions.push('HSK ' + this.entry!.h);
+      normalizedDefinitions.push('HSK ' + this.entry!.h);
     }
-    this.panel.definitions = definitions;
+
+    this.panel.definitions = normalizedDefinitions;
+  }
+
+  getPartitionKey(index: number): string {
+    if (index === 8) {
+      return 'learned';
+    }
+    if (index === 9) {
+      return 'buffer';
+    }
+    return index.toString();
   }
 
   async nextEntry() {
     if (this.entry) {
+      const now = Date.now();
+      const success = this.totalMistakes <= 1;
+      this.recordEntryAttempt(this.entry, success);
+
       if (this.totalMistakes <= 1) {
         const tx = this.db.transaction('partitions', 'readwrite');
         const promises = [];
@@ -143,6 +202,9 @@ class App {
           this.entry.correct++;
         }
         if (this.entry.correct >= 2) {
+          if (!this.entry.stats?.lastLearnedAt) {
+            this.entry.stats!.lastLearnedAt = now;
+          }
           this.partitions[8].push(this.entry);
           promises.push(tx.store.put(this.partitions[8], 'learned'));
         } else if (this.entry.correct >= 1) {
@@ -154,11 +216,12 @@ class App {
         }
         promises.push(tx.store.put(this.partitions[9], 'buffer'));
         promises.push(tx.done);
+        await Promise.all(promises);
       } else {
         this.entry.correct = 0;
         const index = Math.floor(this.partitions[9].length * 0.8);
         this.partitions[9].splice(index, 0, this.entry);
-        this.db.put('partitions', this.partitions[9], 'buffer');
+        await this.db.put('partitions', this.partitions[9], 'buffer');
       }
     }
 
@@ -197,7 +260,33 @@ class App {
   }
 
   async load() {
-    const tx = this.db.transaction(['partitions', 'partition-lengths'], 'readonly');
+    const tx = this.db.transaction(['partitions', 'partition-lengths'], 'readwrite');
+    
+    // Backwards compatibility: load and merge legacy key '8' if it exists in partitions or partition-lengths
+    const legacyPartitionsPromise = tx.objectStore('partitions').get('8') as Promise<PartitionElement[] | undefined>;
+    const legacyLengthsPromise = tx.objectStore('partition-lengths').get('8') as Promise<number | undefined>;
+    const learnedPartitionsPromise = tx.objectStore('partitions').get('learned') as Promise<PartitionElement[] | undefined>;
+    
+    const [legacyPart, legacyLen, learnedPart] = await Promise.all([
+      legacyPartitionsPromise,
+      legacyLengthsPromise,
+      learnedPartitionsPromise,
+    ]);
+
+    let mergedLearned = learnedPart || [];
+    if (legacyPart && legacyPart.length > 0) {
+      const existing = new Set(mergedLearned.map(e => e.t));
+      for (const entry of legacyPart) {
+        if (!existing.has(entry.t)) {
+          mergedLearned.push(entry);
+        }
+      }
+      await tx.objectStore('partitions').put(mergedLearned, 'learned');
+      await tx.objectStore('partition-lengths').put(mergedLearned.length, 'learned');
+      await tx.objectStore('partitions').delete('8');
+      await tx.objectStore('partition-lengths').delete('8');
+    }
+
     const promises: [Promise<PartitionElement[]>, Promise<number>][] = [];
     for (let i = 0; i <= 7; i++) {
       promises.push([
@@ -206,17 +295,21 @@ class App {
       ]);
     }
     promises.push([
-      tx.objectStore('partitions').get('learned') as Promise<PartitionElement[]>,
-      tx.objectStore('partition-lengths').get('learned') as Promise<number>
+      Promise.resolve(mergedLearned),
+      Promise.resolve(mergedLearned.length)
     ]);
     promises.push([
       tx.objectStore('partitions').get('buffer') as Promise<PartitionElement[]>,
       tx.objectStore('partition-lengths').get('buffer') as Promise<number>
     ]);
+    
     const partitions = await Promise.all(promises.map(async (p) => await Promise.all(p)));
     this.partitions = partitions.map(([partition, ]) => partition || []);
     this.partition_lengths = partitions.map(([, length]) => length || 0);
     this.buffer_size = (await this.db.get('config', 'buffer_size')) || 100;
+    
+    await tx.done;
+
     await Promise.all([
       this.updateProbability(),
       this.updateType(),
@@ -282,6 +375,7 @@ class App {
         const partition = this.partitions[partitioni];
         const word = sample(partition);
         if (word) {
+          word.correct = 0; // Reset consecutive correct attempts upon entering the queue
           this.partitions[9].push(word);
           changed.add(partitioni);
         }
@@ -290,11 +384,11 @@ class App {
       const tx = this.db!.transaction('partitions', 'readwrite');
       const promises = []
       for (const c of changed) {
-        promises.push(tx.store.put(this.partitions[c], c.toString()));
+        promises.push(tx.store.put(this.partitions[c], this.getPartitionKey(c)));
       }
       promises.push(tx.store.put(this.partitions[9], 'buffer'));
       promises.push(tx.done);
-      Promise.all(promises);
+      await Promise.all(promises);
     }
   }
 
@@ -317,13 +411,14 @@ class App {
     while (this.partitions[9].length > 0) {
       const item = this.partitions[9].pop()!;
       let partition = -1;
-      if (item.h) {
-        this.partitions[item.h].push(item);
-        partition = item.h;
-      } else if (item.correct) {
-        if (item.correct > 1) {
-
-        }
+      const isLearned = (item.correct !== undefined && item.correct >= 2) || (item.stats?.lastLearnedAt || 0) > 0;
+      if (isLearned) {
+        this.partitions[8].push(item);
+        partition = 8;
+      } else {
+        const pIndex = item.h || 0;
+        this.partitions[pIndex].push(item);
+        partition = pIndex;
       }
       changed.add(partition);
     }
@@ -331,10 +426,13 @@ class App {
     const tx = this.db!.transaction('partitions', 'readwrite');
     const promises = []
     for (const c of changed) {
-      promises.push(tx.store.put(this.partitions[c], c.toString()));
+      if (c >= 0) {
+        promises.push(tx.store.put(this.partitions[c], this.getPartitionKey(c)));
+      }
     }
     promises.push(tx.store.put(this.partitions[9], 'buffer'));
     promises.push(tx.done);
+    await Promise.all(promises);
   }
 
   async render() {
