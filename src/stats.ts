@@ -3,6 +3,8 @@ import { IDBPDatabase } from 'idb';
 import Fuse from 'fuse.js';
 import { MDCChipSet } from '@material/chips';
 import Color from 'color';
+import { signInWithGoogle, signOut, onAuthChanged, getCurrentUser } from './firebase';
+import { SyncEngine, SyncStatus } from './sync';
 
 const PAGE_SIZE = 100;
 const SEARCH_RESULT_LIMIT = 2200;
@@ -1041,9 +1043,144 @@ function sortEntries<T extends PartitionElement>(
   }) as Array<T>;
 }
 
+function updateAuthUI(user: import('firebase/auth').User | null, status: SyncStatus) {
+  const authBtn = document.getElementById('auth-button');
+  const authAvatar = document.getElementById('auth-avatar') as HTMLImageElement | null;
+  const authMenu = document.getElementById('auth-menu');
+  const syncDot = document.getElementById('sync-status-dot');
+  const authName = document.getElementById('auth-user-name');
+
+  if (syncDot) {
+    syncDot.className = 'sync-status-dot';
+    switch (status) {
+      case 'syncing': syncDot.classList.add('sync-status--syncing'); syncDot.title = 'Syncing…'; break;
+      case 'synced': syncDot.classList.add('sync-status--synced'); syncDot.title = 'Synced'; break;
+      case 'error': syncDot.classList.add('sync-status--error'); syncDot.title = 'Sync error'; break;
+      default: syncDot.classList.add('sync-status--idle'); syncDot.title = 'Not synced'; break;
+    }
+  }
+
+  if (user) {
+    if (authBtn) authBtn.style.display = 'none';
+    if (authAvatar) {
+      authAvatar.src = user.photoURL || '';
+      authAvatar.alt = user.displayName || 'User';
+      authAvatar.style.display = '';
+    }
+    if (authName) authName.textContent = user.displayName || user.email || '';
+  } else {
+    if (authBtn) authBtn.style.display = '';
+    if (authAvatar) authAvatar.style.display = 'none';
+    if (authMenu) authMenu.classList.remove('auth-menu--open');
+    if (authName) authName.textContent = '';
+  }
+}
+
 async function main() {
   const dbObj = await Database.build();
   const db = dbObj.db!;
+
+  // --- Auth UI wiring ---
+  let currentSyncStatus: SyncStatus = 'idle';
+  const syncEngine = new SyncEngine();
+
+  syncEngine.onStatusChange((status) => {
+    currentSyncStatus = status;
+    updateAuthUI(getCurrentUser(), status);
+  });
+
+  const authBtn = document.getElementById('auth-button');
+  const authAvatar = document.getElementById('auth-avatar');
+  const authMenu = document.getElementById('auth-menu');
+  const signOutBtn = document.getElementById('auth-signout-btn');
+  const syncNowBtn = document.getElementById('auth-sync-btn');
+
+  if (authBtn) {
+    authBtn.addEventListener('click', async () => {
+      await signInWithGoogle();
+    });
+  }
+
+  if (authAvatar) {
+    authAvatar.addEventListener('click', () => {
+      authMenu?.classList.toggle('auth-menu--open');
+    });
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+      if (authMenu?.classList.contains('auth-menu--open') &&
+          !authMenu.contains(e.target as Node) &&
+          e.target !== authAvatar) {
+        authMenu.classList.remove('auth-menu--open');
+      }
+    });
+  }
+
+  if (signOutBtn) {
+    signOutBtn.addEventListener('click', async () => {
+      await signOut();
+      authMenu?.classList.remove('auth-menu--open');
+    });
+  }
+
+  const triggerFullSync = async () => {
+    // Read all partitions from DB again to ensure we have latest local changes
+    const readTx = db.transaction('partitions', 'readonly');
+    const localPartitions = await Promise.all(
+      WORDSET_PARTITIONS.map((partitionKey) => readTx.objectStore('partitions').get(partitionKey))
+    );
+    await readTx.done;
+    
+    // We also need the buffer
+    const buffer = await db.get('partitions', 'buffer');
+    
+    // Construct partitions array to pass to fullSync
+    const partitionsArray = [...localPartitions];
+    partitionsArray.splice(8, 0, buffer || []); // buffer is at index 9, learned is at index 8. But wait, WORDSET_PARTITIONS ends with 'learned'. So index 8 is learned.
+    
+    // Since we need getPartitionKey to match...
+    const getPartitionKey = (i: number) => {
+      if (i === 8) return 'learned';
+      if (i === 9) return 'buffer';
+      return String(i);
+    };
+
+    // Construct array of exactly length 10
+    const syncPartitions = [];
+    for (let i = 0; i < 8; i++) syncPartitions.push(localPartitions[i] || []);
+    syncPartitions.push(localPartitions[8] || []); // learned
+    syncPartitions.push(buffer || []); // buffer
+
+    const modifiedKeys = await syncEngine.fullSync(syncPartitions, getPartitionKey);
+    if (modifiedKeys.size > 0) {
+      const tx = db.transaction('partitions', 'readwrite');
+      for (const key of modifiedKeys) {
+        const pi = key === 'learned' ? 8 : key === 'buffer' ? 9 : parseInt(key, 10);
+        if (pi >= 0 && pi < syncPartitions.length) {
+          await tx.store.put(syncPartitions[pi], key);
+        }
+      }
+      await tx.done;
+      // Reload the page to reflect synced changes in the stats view
+      location.reload();
+    }
+  };
+
+  if (syncNowBtn) {
+    syncNowBtn.addEventListener('click', async () => {
+      authMenu?.classList.remove('auth-menu--open');
+      await triggerFullSync();
+    });
+  }
+
+  onAuthChanged(async (user) => {
+    updateAuthUI(user, currentSyncStatus);
+    if (user) {
+      await triggerFullSync();
+    }
+  });
+
+  updateAuthUI(getCurrentUser(), currentSyncStatus);
+
   
   try {
     const themeColor = await db.get('config', 'color');

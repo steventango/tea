@@ -84,6 +84,24 @@
         <div class="mdc-icon-button__touch"></div>
       </button>
     </div>
+    <div class="auth-container">
+      <div id="sync-status-dot" class="sync-status-dot sync-status--idle" title="Not synced"></div>
+      <button id="auth-button" class="mdc-icon-button mdc-icon-button--touch material-icons auth-sign-in-btn" title="Sign in with Google">
+        <div class="mdc-icon-button__ripple"></div>
+        login
+        <div class="mdc-icon-button__touch"></div>
+      </button>
+      <img id="auth-avatar" class="auth-avatar" style="display: none;" alt="User" />
+      <div id="auth-menu" class="auth-menu">
+        <span id="auth-user-name" class="auth-menu-name"></span>
+        <button id="auth-sync-btn" class="auth-menu-item">
+          <span class="material-icons">sync</span> Sync now
+        </button>
+        <button id="auth-signout-btn" class="auth-menu-item">
+          <span class="material-icons">logout</span> Sign out
+        </button>
+      </div>
+    </div>
     <div class="mdc-layout-grid">
       <div class="mdc-layout-grid__inner">
         <div id="panel" class="mdc-layout-grid__cell mdc-layout-grid__cell--span-6-desktop mdc-layout-grid__cell--span-12-tablet mdc-layout-grid__cell--span-12-phone">

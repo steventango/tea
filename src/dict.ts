@@ -14,4 +14,5 @@ export interface LearningStats {
   strength: number;
   lastLearnedAt: number;
   lastReviewedAt: number;
+  updatedAt?: number;
 }

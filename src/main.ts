@@ -9,6 +9,8 @@ import {MDCDialog} from '@material/dialog';
 import {MDCCheckbox} from '@material/checkbox';
 import { MDCTextField } from '@material/textfield';
 import Panel from './panel';
+import { signInWithGoogle, signOut, onAuthChanged, getCurrentUser } from './firebase';
+import { SyncEngine, SyncStatus } from './sync';
 
 const linearProgress = new MDCLinearProgress(document.querySelector('.mdc-linear-progress')!);
 const probabilityFields = ['dictionary', 'hsk-1', 'hsk-2', 'hsk-3', 'hsk-4', 'hsk-5', 'hsk-6', 'hsk-7', 'learned'] as const;
@@ -49,9 +51,11 @@ class App {
   totalMistakes: number;
   currentCharacter: string | null;
   fallbackChar: string | null;
+  syncEngine: SyncEngine;
 
   constructor(db: IDBPDatabase<DB>) {
     this.enable_outline = false;
+    this.syncEngine = new SyncEngine();
     const target = document.getElementById('target')!;
     const size = Math.min(target.clientWidth, target.clientHeight);
     this.db = db;
@@ -154,6 +158,7 @@ class App {
       strength: 0,
       lastLearnedAt: 0,
       lastReviewedAt: 0,
+      updatedAt: 0,
     };
     if (!entry.stats) {
       entry.stats = base;
@@ -166,6 +171,7 @@ class App {
       strength: Number.isFinite(entry.stats.strength) ? Math.max(0, Math.min(1, entry.stats.strength)) : 0,
       lastLearnedAt: Number.isFinite(entry.stats.lastLearnedAt) ? Math.max(0, Math.floor(entry.stats.lastLearnedAt)) : 0,
       lastReviewedAt: Number.isFinite(entry.stats.lastReviewedAt) ? Math.max(0, Math.floor(entry.stats.lastReviewedAt)) : 0,
+      updatedAt: Number.isFinite(entry.stats.updatedAt) ? Math.max(0, Math.floor(entry.stats.updatedAt as number)) : 0,
     };
   }
 
@@ -179,10 +185,13 @@ class App {
       stats.failures += 1;
     }
     stats.lastReviewedAt = now;
+    stats.updatedAt = now;
     const accuracy = stats.attempts > 0 ? stats.successes / stats.attempts : 0;
     const volumeFactor = Math.min(1, stats.successes / 5);
     stats.strength = accuracy * volumeFactor;
     entry.stats = stats;
+    // Queue for cloud sync
+    this.syncEngine.queueUpload(entry);
   }
 
   updateEntry() {
@@ -579,6 +588,39 @@ class App {
   }
 }
 
+function updateAuthUI(user: import('firebase/auth').User | null, status: SyncStatus) {
+  const authBtn = document.getElementById('auth-button');
+  const authAvatar = document.getElementById('auth-avatar') as HTMLImageElement | null;
+  const authMenu = document.getElementById('auth-menu');
+  const syncDot = document.getElementById('sync-status-dot');
+  const authName = document.getElementById('auth-user-name');
+
+  if (syncDot) {
+    syncDot.className = 'sync-status-dot';
+    switch (status) {
+      case 'syncing': syncDot.classList.add('sync-status--syncing'); syncDot.title = 'Syncing…'; break;
+      case 'synced': syncDot.classList.add('sync-status--synced'); syncDot.title = 'Synced'; break;
+      case 'error': syncDot.classList.add('sync-status--error'); syncDot.title = 'Sync error'; break;
+      default: syncDot.classList.add('sync-status--idle'); syncDot.title = 'Not synced'; break;
+    }
+  }
+
+  if (user) {
+    if (authBtn) authBtn.style.display = 'none';
+    if (authAvatar) {
+      authAvatar.src = user.photoURL || '';
+      authAvatar.alt = user.displayName || 'User';
+      authAvatar.style.display = '';
+    }
+    if (authName) authName.textContent = user.displayName || user.email || '';
+  } else {
+    if (authBtn) authBtn.style.display = '';
+    if (authAvatar) authAvatar.style.display = 'none';
+    if (authMenu) authMenu.classList.remove('auth-menu--open');
+    if (authName) authName.textContent = '';
+  }
+}
+
 async function main() {
   linearProgress.determinate = false;
   const dialog = new MDCDialog(document.querySelector('.mdc-dialog')!);
@@ -590,6 +632,86 @@ async function main() {
   await app.load();
   initializeProbabilityCheckboxes();
   app.render();
+
+  // --- Auth UI wiring ---
+  let currentSyncStatus: SyncStatus = 'idle';
+
+  app.syncEngine.onStatusChange((status) => {
+    currentSyncStatus = status;
+    updateAuthUI(getCurrentUser(), status);
+  });
+
+  const authBtn = document.getElementById('auth-button');
+  const authAvatar = document.getElementById('auth-avatar');
+  const authMenu = document.getElementById('auth-menu');
+  const signOutBtn = document.getElementById('auth-signout-btn');
+  const syncNowBtn = document.getElementById('auth-sync-btn');
+
+  if (authBtn) {
+    authBtn.addEventListener('click', async () => {
+      await signInWithGoogle();
+    });
+  }
+
+  if (authAvatar) {
+    authAvatar.addEventListener('click', () => {
+      authMenu?.classList.toggle('auth-menu--open');
+    });
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+      if (authMenu?.classList.contains('auth-menu--open') &&
+          !authMenu.contains(e.target as Node) &&
+          e.target !== authAvatar) {
+        authMenu.classList.remove('auth-menu--open');
+      }
+    });
+  }
+
+  if (signOutBtn) {
+    signOutBtn.addEventListener('click', async () => {
+      await signOut();
+      authMenu?.classList.remove('auth-menu--open');
+    });
+  }
+
+  if (syncNowBtn) {
+    syncNowBtn.addEventListener('click', async () => {
+      authMenu?.classList.remove('auth-menu--open');
+      const modifiedKeys = await app.syncEngine.fullSync(app.partitions, (i) => app.getPartitionKey(i));
+      if (modifiedKeys.size > 0) {
+        // Write changed partitions back to IndexedDB
+        const tx = db.transaction('partitions', 'readwrite');
+        for (const key of modifiedKeys) {
+          const pi = key === 'learned' ? 8 : key === 'buffer' ? 9 : parseInt(key, 10);
+          if (pi >= 0 && pi < app.partitions.length) {
+            await tx.store.put(app.partitions[pi], key);
+          }
+        }
+        await tx.done;
+      }
+    });
+  }
+
+  onAuthChanged(async (user) => {
+    updateAuthUI(user, currentSyncStatus);
+    if (user) {
+      // Full sync on sign-in
+      const modifiedKeys = await app.syncEngine.fullSync(app.partitions, (i) => app.getPartitionKey(i));
+      if (modifiedKeys.size > 0) {
+        const tx = db.transaction('partitions', 'readwrite');
+        for (const key of modifiedKeys) {
+          const pi = key === 'learned' ? 8 : key === 'buffer' ? 9 : parseInt(key, 10);
+          if (pi >= 0 && pi < app.partitions.length) {
+            await tx.store.put(app.partitions[pi], key);
+          }
+        }
+        await tx.done;
+      }
+    }
+  });
+
+  // Initialize auth UI state
+  updateAuthUI(getCurrentUser(), currentSyncStatus);
 
   const sourceInputs = probabilityFields.map((name) =>
     document.getElementById(`probability-${name}`)! as HTMLInputElement
