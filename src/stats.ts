@@ -26,7 +26,7 @@ type SearchScope = 'all' | 'character' | 'simplified' | 'pinyin' | 'jyutping' | 
 
 const SEARCH_PLACEHOLDERS: Record<SearchScope, string> = {
   all: 'characters, pinyin, jyutping, definitions, HSK',
-  character: 'Chinese characters',
+  character: 'Chinese characters (traditional & simplified)',
   simplified: 'simplified characters',
   pinyin: 'pinyin (bai, laoshi, xiangjiao)',
   jyutping: 'jyutping (maa5, gong2)',
@@ -65,9 +65,9 @@ const SCOPE_PREFIXES: Record<string, SearchScope> = {
   char: 'character',
   character: 'character',
   c: 'character',
-  simp: 'simplified',
-  simplified: 'simplified',
-  s: 'simplified',
+  simp: 'character',
+  simplified: 'character',
+  s: 'character',
   p: 'pinyin',
   py: 'pinyin',
   pinyin: 'pinyin',
@@ -1265,7 +1265,7 @@ async function main() {
   const scopeHint: Record<SearchScope, string> = {
     all: 'all',
     character: 'character',
-    simplified: 'simplified',
+    simplified: 'character',
     pinyin: 'p:',
     jyutping: 'j:',
     definition: 'e:',
@@ -1273,8 +1273,8 @@ async function main() {
   };
   const scopeLabel: Record<SearchScope, string> = {
     all: 'all fields',
-    character: 'character',
-    simplified: 'simplified',
+    character: 'Chinese characters',
+    simplified: 'Chinese characters',
     pinyin: 'pinyin',
     jyutping: 'jyutping',
     definition: 'definitions',
