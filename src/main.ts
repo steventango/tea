@@ -363,6 +363,7 @@ class App {
 
     this.writer.updateColor('strokeColor', colors.stroke);
     this.writer.updateColor('highlightColor', colors.highlight);
+    this.writer.updateColor('highlightCompleteColor', this.color);
     this.writer.updateColor('outlineColor', colors.outline);
     this.writer.updateColor('drawingColor', colors.primary);
   }
