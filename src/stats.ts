@@ -1128,8 +1128,13 @@ async function main() {
         }
       }
       await tx.done;
-      // Reload the page to reflect synced changes in the stats view
-      location.reload();
+      
+      // Prevent reload loop by checking if we already reloaded due to sync in this page load session
+      const syncReloadKey = 'stats_sync_reloaded';
+      if (!sessionStorage.getItem(syncReloadKey)) {
+        sessionStorage.setItem(syncReloadKey, 'true');
+        location.reload();
+      }
     }
   };
 
