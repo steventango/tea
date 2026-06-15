@@ -84,6 +84,7 @@ export default class Database {
       promises.push(tx.store.add([0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125], 'probabilities'));
       promises.push(tx.store.add(100, 'buffer_size'));
       promises.push(tx.store.add('traditional', 'type'));
+      promises.push(tx.store.add(Date.now(), 'updatedAt'));
       promises.push(tx.done);
       await Promise.all(promises);
     }

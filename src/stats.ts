@@ -740,7 +740,9 @@ function createQueueStateBadge(state: QueueState, isLearned: boolean) {
 function createActionButton(
   entry: PartitionElement,
   state: QueueState,
-  onAdd: (entry: PartitionElement) => Promise<boolean>,
+  db: IDBPDatabase<DB>,
+  syncEngine: SyncEngine,
+  onAdd: (entry: PartitionElement, db: IDBPDatabase<DB>, syncEngine: SyncEngine) => Promise<boolean>,
   isLearned: boolean,
   onStateChange?: (nextState: QueueState) => void,
 ) {
@@ -790,7 +792,7 @@ function createActionButton(
     icon.textContent = 'hourglass_empty';
 
     try {
-      const added = await onAdd(entry);
+      const added = await onAdd(entry, db, syncEngine);
       if (added) {
         onStateChange?.('queued');
         button.disabled = true;
@@ -866,7 +868,9 @@ function createStrengthCell(value: number | undefined, label?: string, className
 function createStatRows(
   entry: PartitionElement,
   queueState: QueueState,
-  onAdd: (entry: PartitionElement) => Promise<boolean>,
+  db: IDBPDatabase<DB>,
+  syncEngine: SyncEngine,
+  onAdd: (entry: PartitionElement, db: IDBPDatabase<DB>, syncEngine: SyncEngine) => Promise<boolean>,
   isLearned: boolean,
   searchTerms: Array<string>,
 ) {
@@ -954,7 +958,7 @@ function createStatRows(
   const actionCell = document.createElement('div');
   actionCell.className = 'stats-card-field stats-action-cell';
   actionCell.dataset.label = 'Queue';
-  const actionButton = createActionButton(entry, queueState, onAdd, isLearned, updateQueueStateVisuals);
+  const actionButton = createActionButton(entry, queueState, db, syncEngine, onAdd, isLearned, updateQueueStateVisuals);
   actionButtonRef = actionButton;
   actionCell.appendChild(actionButton);
   card.appendChild(actionCell);
@@ -973,7 +977,7 @@ function clearChildren(node: HTMLElement) {
   }
 }
 
-async function addToLearningQueue(db: IDBPDatabase<DB>, entry: PartitionElement) {
+async function addToLearningQueue(db: IDBPDatabase<DB>, entry: PartitionElement, syncEngine: SyncEngine) {
   const tx = db.transaction(['partitions', 'partition-lengths'], 'readwrite');
   const partitionStore = tx.objectStore('partitions');
   const lengthStore = tx.objectStore('partition-lengths');
@@ -1005,6 +1009,8 @@ async function addToLearningQueue(db: IDBPDatabase<DB>, entry: PartitionElement)
   await partitionStore.put(next, 'buffer');
   await lengthStore.put(next.length, 'buffer');
   await tx.done;
+  
+  syncEngine.queueUpload(clone, 'buffer');
 
   return true;
 }
@@ -1573,8 +1579,8 @@ async function main() {
         addedThisRender += 1;
         const state = getQueueState(entry, queued.has(entry.t), isEntrySelected(entry));
         const isLearned = statusFor(entry, queued) === 'learned';
-        fragment.appendChild(createStatRows(entry, state, async () => {
-          const added = await addToLearningQueue(db, entry);
+        fragment.appendChild(createStatRows(entry, state, db, syncEngine, async (entry, db, syncEngine) => {
+          const added = await addToLearningQueue(db, entry, syncEngine);
           if (added) {
             queued.add(entry.t);
             const counts = computeCounts(filtered);
