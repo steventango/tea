@@ -1046,9 +1046,7 @@ function sortEntries<T extends PartitionElement>(
 function updateAuthUI(user: import('firebase/auth').User | null, status: SyncStatus) {
   const authBtn = document.getElementById('auth-button');
   const authAvatar = document.getElementById('auth-avatar') as HTMLImageElement | null;
-  const authMenu = document.getElementById('auth-menu');
   const syncDot = document.getElementById('sync-status-dot');
-  const authName = document.getElementById('auth-user-name');
 
   if (syncDot) {
     syncDot.className = 'sync-status-dot';
@@ -1067,12 +1065,9 @@ function updateAuthUI(user: import('firebase/auth').User | null, status: SyncSta
       authAvatar.alt = user.displayName || 'User';
       authAvatar.style.display = '';
     }
-    if (authName) authName.textContent = user.displayName || user.email || '';
   } else {
     if (authBtn) authBtn.style.display = '';
     if (authAvatar) authAvatar.style.display = 'none';
-    if (authMenu) authMenu.classList.remove('auth-menu--open');
-    if (authName) authName.textContent = '';
   }
 }
 
@@ -1091,9 +1086,6 @@ async function main() {
 
   const authBtn = document.getElementById('auth-button');
   const authAvatar = document.getElementById('auth-avatar');
-  const authMenu = document.getElementById('auth-menu');
-  const signOutBtn = document.getElementById('auth-signout-btn');
-  const syncNowBtn = document.getElementById('auth-sync-btn');
 
   if (authBtn) {
     authBtn.addEventListener('click', async () => {
@@ -1102,23 +1094,10 @@ async function main() {
   }
 
   if (authAvatar) {
-    authAvatar.addEventListener('click', () => {
-      authMenu?.classList.toggle('auth-menu--open');
-    });
-    // Close menu when clicking outside
-    document.addEventListener('click', (e) => {
-      if (authMenu?.classList.contains('auth-menu--open') &&
-          !authMenu.contains(e.target as Node) &&
-          e.target !== authAvatar) {
-        authMenu.classList.remove('auth-menu--open');
+    authAvatar.addEventListener('click', async () => {
+      if (confirm('Sign out?')) {
+        await signOut();
       }
-    });
-  }
-
-  if (signOutBtn) {
-    signOutBtn.addEventListener('click', async () => {
-      await signOut();
-      authMenu?.classList.remove('auth-menu--open');
     });
   }
 
@@ -1164,13 +1143,6 @@ async function main() {
       location.reload();
     }
   };
-
-  if (syncNowBtn) {
-    syncNowBtn.addEventListener('click', async () => {
-      authMenu?.classList.remove('auth-menu--open');
-      await triggerFullSync();
-    });
-  }
 
   onAuthChanged(async (user) => {
     updateAuthUI(user, currentSyncStatus);
