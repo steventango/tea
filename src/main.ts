@@ -10,7 +10,7 @@ import {MDCCheckbox} from '@material/checkbox';
 import { MDCTextField } from '@material/textfield';
 import Panel from './panel';
 import { signInWithGoogle, signOut, onAuthChanged, getCurrentUser } from './firebase';
-import { SyncEngine, SyncStatus } from './sync';
+import { SyncEngine, SyncStatus, UserConfig } from './sync';
 
 const linearProgress = new MDCLinearProgress(document.querySelector('.mdc-linear-progress')!);
 const probabilityFields = ['dictionary', 'hsk-1', 'hsk-2', 'hsk-3', 'hsk-4', 'hsk-5', 'hsk-6', 'hsk-7', 'learned'] as const;
@@ -190,8 +190,6 @@ class App {
     const volumeFactor = Math.min(1, stats.successes / 5);
     stats.strength = accuracy * volumeFactor;
     entry.stats = stats;
-    // Queue for cloud sync
-    this.syncEngine.queueUpload(entry);
   }
 
   updateEntry() {
@@ -248,12 +246,15 @@ class App {
           }
           this.partitions[8].push(this.entry);
           promises.push(tx.store.put(this.partitions[8], 'learned'));
+          this.syncEngine.queueUpload(this.entry, 'learned');
         } else if (this.entry.correct >= 1) {
           const index = 0;
           this.partitions[9].splice(index, 0, this.entry);
+          this.syncEngine.queueUpload(this.entry, 'buffer');
         } else {
           const index = Math.floor(this.partitions[9].length * 0.8);
           this.partitions[9].splice(index, 0, this.entry);
+          this.syncEngine.queueUpload(this.entry, 'buffer');
         }
         promises.push(tx.store.put(this.partitions[9], 'buffer'));
         promises.push(tx.done);
@@ -263,6 +264,7 @@ class App {
         const index = Math.floor(this.partitions[9].length * 0.8);
         this.partitions[9].splice(index, 0, this.entry);
         await this.db.put('partitions', this.partitions[9], 'buffer');
+        this.syncEngine.queueUpload(this.entry, 'buffer');
       }
     }
 
@@ -612,6 +614,7 @@ async function main() {
   const app = new App(db);
   (window as any).app = app;
   await app.load();
+  await app.syncEngine.syncConfig(db, {}); // Initial sync for config after loading local config
   initializeProbabilityCheckboxes();
   app.render();
 
@@ -640,6 +643,12 @@ async function main() {
   onAuthChanged(async (user) => {
     updateAuthUI(user);
     if (user) {
+      const configModifiedLocally = await app.syncEngine.syncConfig(db, {}); // Sync config first
+      if (configModifiedLocally) {
+        // If config was modified locally (i.e. cloud was newer), reload app config.
+        await app.load(); // Reload app to reflect new config
+        app.render(); // Re-render if necessary
+      }
       const modifiedKeys = await app.syncEngine.fullSync(app.partitions, (i) => app.getPartitionKey(i));
       if (modifiedKeys.size > 0) {
         const tx = db.transaction('partitions', 'readwrite');
@@ -714,23 +723,56 @@ async function main() {
     const hadType = app.type;
     const textfield_color = new MDCTextField(document.getElementById('color-textfield')!);
     const promises = [];
+    let configUpdatedLocally = false;
+    const now = Date.now();
+
+    const newConfigForSync: Partial<UserConfig> = { updatedAt: now };
+
     if (radio_t.checked) {
       if (app.type !== 't') {
         app.type = 't';
-        promises.push(tx.store.put('t', 'traditional'));
+        newConfigForSync.type = 'traditional';
+        promises.push(tx.store.put('traditional', 'type'));
+        configUpdatedLocally = true;
       }
     } else if (app.type !== 's') {
       app.type = 's';
-      promises.push(tx.store.put('t', 'simplified'));
+      newConfigForSync.type = 'simplified';
+      promises.push(tx.store.put('simplified', 'type'));
+      configUpdatedLocally = true;
     }
 
     if (textfield_color.value !== app.color) {
+      app.color = textfield_color.value;
+      newConfigForSync.color = textfield_color.value;
       promises.push(tx.store.put(textfield_color.value, 'color'));
+      configUpdatedLocally = true;
     }
 
     const hadProbabilityChange = probabilities.some((value, index) => value !== app.probabilities[index]);
-    app.probabilities = probabilities;
-    promises.push(tx.store.put(probabilities, 'probabilities'));
+    if (hadProbabilityChange) {
+      app.probabilities = probabilities;
+      newConfigForSync.probabilities = probabilities;
+      promises.push(tx.store.put(probabilities, 'probabilities'));
+      configUpdatedLocally = true;
+    }
+
+    if (configUpdatedLocally) {
+      promises.push(tx.store.put(now, 'updatedAt'));
+    }
+    
+    // Check buffer_size, which is not in the form but part of config.
+    // If it was modified (e.g. by another synced device), we need to reflect that.
+    // Here we assume app.buffer_size is already updated from local DB.
+    // When config is synced from cloud, app.buffer_size will be updated in app.load()
+    const currentBufferSizeInDb = await db.get('config', 'buffer_size');
+    if (currentBufferSizeInDb !== app.buffer_size) {
+      // This case handles external changes from cloud sync.
+      // If we manually change buffer_size in the future from UI, we need to add a UI element and form field.
+      // For now, assume it's set by app.load and potentially overwritten by cloud sync.
+    }
+
+
     if (promises.length > 0) {
       promises.push(tx.done);
       await Promise.all(promises);
@@ -744,6 +786,9 @@ async function main() {
         app.totalMistakes = 0;
         await app.updateBuffer();
         await app.update_writer();
+      }
+      if (configUpdatedLocally) {
+        await app.syncEngine.syncConfig(db, newConfigForSync);
       }
     }
 

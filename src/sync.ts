@@ -1,13 +1,16 @@
+import { IDBPDatabase } from 'idb';
 import {
   collection,
   doc,
   getDocs,
   writeBatch,
+  getDoc,
+  setDoc,
   Firestore,
 } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import { firestore, getCurrentUser } from './firebase';
-import { PartitionElement } from './database';
+import { PartitionElement, DB } from './database';
 import { LearningStats } from './dict';
 
 export interface WordProgress {
@@ -15,6 +18,7 @@ export interface WordProgress {
   correct: number;
   stats: Required<LearningStats>;
   updatedAt: number;
+  state?: 'buffer' | 'learned';
 }
 
 /** Encode a word's traditional character as a safe Firestore document ID */
@@ -26,9 +30,9 @@ function decodeWordId(id: string): string {
   return decodeURIComponent(id);
 }
 
-function entryToWordProgress(entry: PartitionElement): WordProgress {
+function entryToWordProgress(entry: PartitionElement, state?: 'buffer' | 'learned'): WordProgress {
   const now = Date.now();
-  return {
+  const progress: WordProgress = {
     t: entry.t,
     correct: entry.correct ?? 0,
     stats: {
@@ -42,9 +46,14 @@ function entryToWordProgress(entry: PartitionElement): WordProgress {
     },
     updatedAt: entry.stats?.updatedAt ?? now,
   };
+  if (state) {
+    progress.state = state;
+  }
+  return progress;
 }
 
-function hasProgress(entry: PartitionElement): boolean {
+function hasProgress(entry: PartitionElement, state?: 'buffer' | 'learned'): boolean {
+  if (state === 'buffer' || state === 'learned') return true;
   if (entry.correct && entry.correct > 0) return true;
   if (!entry.stats) return false;
   return (entry.stats.attempts ?? 0) > 0
@@ -158,11 +167,11 @@ export class SyncEngine {
   /**
    * Queue a changed entry for upload. Will be flushed after the debounce interval.
    */
-  queueUpload(entry: PartitionElement): void {
+  queueUpload(entry: PartitionElement, state?: 'buffer' | 'learned'): void {
     const user = getCurrentUser();
     if (!user) return;
 
-    const progress = entryToWordProgress(entry);
+    const progress = entryToWordProgress(entry, state);
     this.uploadQueue.set(entry.t, progress);
 
     if (this.flushTimer) {
@@ -211,6 +220,7 @@ export class SyncEngine {
           correct: entry.correct,
           stats: entry.stats,
           updatedAt: entry.updatedAt,
+          ...(entry.state ? { state: entry.state } : {})
         });
       }
 
@@ -267,26 +277,48 @@ export class SyncEngine {
       for (const [t, cloudEntry] of cloudProgress) {
         const localRef = localIndex.get(t);
         if (localRef) {
+          const localState = localRef.pi === 8 ? 'learned' : localRef.pi === 9 ? 'buffer' : undefined;
           const localEntry = partitions[localRef.pi][localRef.ei];
           const wasModified = mergeCloudIntoLocal(localEntry, cloudEntry);
-          if (wasModified) {
-            modifiedPartitions.add(getPartitionKey(localRef.pi));
+          
+          let needsMove = false;
+          if (cloudEntry.updatedAt >= (localEntry.stats?.updatedAt ?? 0)) {
+            if (cloudEntry.state && cloudEntry.state !== localState) {
+              needsMove = true;
+            }
           }
+          
+          if (wasModified || needsMove) {
+            if (needsMove && cloudEntry.state) {
+              // Move the entry to the new partition structurally
+              partitions[localRef.pi].splice(localRef.ei, 1);
+              modifiedPartitions.add(getPartitionKey(localRef.pi));
+              
+              const targetPi = cloudEntry.state === 'learned' ? 8 : cloudEntry.state === 'buffer' ? 9 : -1;
+              if (targetPi !== -1 && targetPi < partitions.length) {
+                partitions[targetPi].push(localEntry);
+                modifiedPartitions.add(getPartitionKey(targetPi));
+              }
+            } else {
+              modifiedPartitions.add(getPartitionKey(localRef.pi));
+            }
+          }
+          
           // If local is newer, queue for upload
           const localUpdatedAt = localEntry.stats?.updatedAt ?? 0;
           if (localUpdatedAt > (cloudEntry.updatedAt ?? 0)) {
-            toUpload.push(entryToWordProgress(localEntry));
+            toUpload.push(entryToWordProgress(localEntry, localState));
           }
         }
         // Words in cloud but not in local partitions are ignored
-        // (they may be from a different version of partitions.json)
       }
 
       // 4. For each local entry with progress that's not in cloud, upload it
       for (let pi = 0; pi < partitions.length; pi++) {
+        const localState = pi === 8 ? 'learned' : pi === 9 ? 'buffer' : undefined;
         for (const entry of partitions[pi]) {
-          if (hasProgress(entry) && !cloudProgress.has(entry.t)) {
-            toUpload.push(entryToWordProgress(entry));
+          if (hasProgress(entry, localState) && !cloudProgress.has(entry.t)) {
+            toUpload.push(entryToWordProgress(entry, localState));
           }
         }
       }
@@ -311,4 +343,88 @@ export class SyncEngine {
       return new Set();
     }
   }
+
+  // --- Config Sync ---
+  async syncConfig(db: IDBPDatabase<DB>, newConfig?: Partial<UserConfig>): Promise<boolean> {
+    const user = getCurrentUser();
+    if (!user) return false;
+
+    this.setStatus('syncing');
+    try {
+      const configDocRef = doc(firestore, 'users', user.uid, 'config', 'settings');
+      const cloudSnapshot = await getDoc(configDocRef);
+      const cloudConfig = cloudSnapshot.exists() ? (cloudSnapshot.data() as UserConfig) : null;
+
+      const localConfigKeys = ['color', 'type', 'probabilities', 'buffer_size'];
+      const localConfig: Partial<UserConfig> = {};
+      let localUpdatedAt = 0;
+
+      const tx = db.transaction('config', 'readwrite');
+      for (const key of localConfigKeys) {
+        const value = await tx.store.get(key);
+        if (value !== undefined) {
+          (localConfig as any)[key] = value;
+        }
+      }
+      localUpdatedAt = await tx.store.get('updatedAt') || 0;
+      await tx.done;
+
+      let mergedConfig: Partial<UserConfig> = {};
+      let changedLocally = false;
+      let changedRemotely = false;
+
+      if (cloudConfig && cloudConfig.updatedAt > localUpdatedAt) {
+        // Cloud is newer, take cloud config
+        mergedConfig = { ...cloudConfig };
+        changedLocally = true; // Will write cloud to local
+      } else if (localUpdatedAt > (cloudConfig?.updatedAt ?? 0)) {
+        // Local is newer, take local config and upload
+        mergedConfig = { ...localConfig, updatedAt: localUpdatedAt };
+        changedRemotely = true; // Will upload local to cloud
+      } else {
+        // Either both are same age, or one/both don't exist, or local has no progress
+        // Default to local if exists, otherwise cloud, otherwise default values
+        mergedConfig = { ...(cloudConfig || localConfig) };
+        if (!mergedConfig.updatedAt) {
+          mergedConfig.updatedAt = Date.now();
+          if (localConfigKeys.some(key => (localConfig as any)[key] !== undefined)) {
+            changedRemotely = true; // Upload if local existed but no updatedAt
+          }
+        }
+      }
+
+      // Write merged config to local IndexedDB if changed
+      if (changedLocally || changedRemotely || (cloudConfig && !localUpdatedAt)) { // Also write if cloud existed but local didn't have updatedAt
+        const newLocalTx = db.transaction('config', 'readwrite');
+        for (const key of localConfigKeys) {
+          if ((mergedConfig as any)[key] !== undefined) {
+            await newLocalTx.store.put((mergedConfig as any)[key], key);
+          }
+        }
+        await newLocalTx.store.put(mergedConfig.updatedAt!, 'updatedAt');
+        await newLocalTx.done;
+      }
+
+      // Upload merged config to Firestore if changed
+      if (changedRemotely || (changedLocally && !localUpdatedAt)) { // If cloud was newer, and local had no updatedAt, still upload.
+        await setDoc(configDocRef, mergedConfig);
+      }
+      
+      this.setStatus('synced');
+      return changedLocally; // Return true if local IndexedDB was updated
+    } catch (error) {
+      console.error('Config sync failed:', error);
+      this.setStatus('error');
+      return false;
+    }
+  }
+}
+
+// Define UserConfig interface
+export interface UserConfig {
+  color?: string;
+  type?: 'traditional' | 'simplified';
+  probabilities?: number[];
+  buffer_size?: number;
+  updatedAt: number;
 }
